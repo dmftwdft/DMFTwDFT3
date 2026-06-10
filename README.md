@@ -1,4 +1,4 @@
-# DMFTwDFT
+# DMFTwDFT3
 
 DMFTwDFT is an open-source, user-friendly framework to calculate electronic, vibrational and elastic properties in strongly
 correlated materials (SCM) using beyond-DFT methods such as DFT+U, DFT+Hybrids and DFT+DMFT (Dynamical Mean Field Theory) with a variety of different DFT codes. Currently supports VASP, Siesta and Quantum Espresso.
@@ -67,7 +67,7 @@ Chris Marianetti <br />
 
 If you have used DMFTwDFT in your work, please cite:
 
-[10.1016/j.cpc.2020.107778](https://www.sciencedirect.com/science/article/abs/pii/S001046552030388X)
+[DMFTwDFT: An Open-Source Code Combining Dynamical Mean Field Theory with Various Density Functional Theory Packages. Singh, V., Herath, U., Wah, B., Liao, X., Romero, A. H., and Park, H. Computer Physics Communications, 261: 107778. April 2021.](https://www.sciencedirect.com/science/article/abs/pii/S001046552030388X)
 
 BibTex:
 
@@ -84,13 +84,9 @@ BibTex:
     keywords = "DFT, DMFT, Strongly correlated materials, Python, Condensed matter physics, Many-body physics",
     }
 
-Thank you.
-
 ## Mailing list
 
-Please post your questions on our forum.
-
-https://groups.google.com/d/forum/dmftwdft
+Please post your questions on our forum: https://groups.google.com/d/forum/dmftwdft
 
 ## Acknowledgements
 
@@ -102,7 +98,7 @@ The original implementation of the CTQMC solver is described in the following pa
 
 [1] Kristjan Haule, Phys. Rev. B 75, 155113 (2007).
 
-Free energy implementation :
+Free energy implementation :<br />
 [2] Kristjan Haule, Turan Birol, Phys. Rev. Lett. 115, 256402 (2015).
 
 - [Wannier90](http://www.wannier.org/)<br>
