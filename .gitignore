@@ -1,8 +1,8 @@
 *.pyc
 .DS_Store
-/Makefile.in
-/sources/make.inc
-/sources/eDMFT/
+Makefile.in
+make.inc
+eDMFT
 libdmft.a
 wannier90.x
 w90chk2chk.x
@@ -11,7 +11,7 @@ dmft_dos.x
 dmft_ksum_band
 dmft_ksum_partial_band
 dmft_ksum_sp
-dmft_ksum
+sources/dmft_ksum/dmft_ksum
 dmft_ksum_dos
 fort_kpt_tools.so
 ctqmc
@@ -19,18 +19,17 @@ skrams
 gaunt.so
 gutils.so
 maxent_routines.so
-/bin/dpybind.so
-/bin/cubic_harmonics.py
-/bin/maxentropy.py
-/bin/maxent_run.py
+dpybind.so
+cubic_harmonics.py
+maxentropy.py
+maxent_run.py
 vasp
 vaspDMFT
 vasp_std
 siesta
 sources/src/obj/*
-sources/EDMFTF*
 *.log
-make.inc
+*.mod
 
 #sphinx
 _build/

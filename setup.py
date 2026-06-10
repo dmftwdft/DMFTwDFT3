@@ -122,17 +122,15 @@ def write_edmft_makefile(base_makefile_path, edmft_src_dir):
     with open(base_makefile_path, "r") as fp:
         makefile = fp.read().rstrip() + "\n"
 
-    values = read_makefile_vars(base_makefile_path)
-    python_cc = command_executable(values.get("CC"), "gcc")
-    python_cxx = command_executable(values.get("C++"), "g++")
-
     include_dir = os.path.join(edmft_src_dir, "includes")
     python_include = get_paths()["include"]
     safe_f2py_fflags = "--f90flags='-fopenmp -O2'"
 
     makefile += "DESTDIR = bin\n"
+    # Keep f2py's C/C++ wrapper build on the GNU toolchain. Mixing icx/icpx
+    # with gfortran here leaves unresolved Intel runtime symbols in gaunt.so.
     makefile += "CMP = env SETUPTOOLS_USE_DISTUTILS=stdlib CC={0} CXX={1} FC=gfortran F77=gfortran F90=gfortran NPY_DISTUTILS_APPEND_FLAGS=1 {2} -m numpy.f2py --opt='-O2' --fcompiler=gnu95\n".format(
-        python_cc, python_cxx, sys.executable
+        "gcc", "g++", sys.executable
     )
     makefile += "F2PL = {0}\n".format(safe_f2py_fflags)
     makefile += "PYBND = -I{0} -I{1} -shared -std=c++11 -fPIC\n".format(
