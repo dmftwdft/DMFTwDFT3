@@ -23,7 +23,7 @@ dpybind.so
 cubic_harmonics.py
 maxentropy.py
 maxent_run.py
-vasp
+/bin/vasp
 vaspDMFT
 vasp_std
 siesta
