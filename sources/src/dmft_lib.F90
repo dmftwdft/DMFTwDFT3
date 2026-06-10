@@ -30,6 +30,8 @@ subroutine Compute_DMFT(n_kpts_loc,n_wann,kpt_dft,wght_dft,band_win_loc,DMFT_eva
   real(kind=dp) :: tot
 !  integer :: id,nodes
 
+! check if seedname.dat is present
+  call check_seedname() 
 !  write(*,*) kpt_dft
 !!
 !!  mpi_comm_world=mpi_comm_world_loc
@@ -90,6 +92,8 @@ subroutine Compute_DMFT_from_amn(n_kpts_loc,n_wann,kpt_dft,wght_dft,band_win_loc
 !  call mpi_comm_rank(mpi_comm_world_loc, my_node_id, ierr)
 !  call mpi_comm_size(mpi_comm_world_loc, num_nodes, ierr)
 !  call mpi_allreduce(my_node_id,b,1,mpi_integer_loc,mpi_sum_loc,mpi_comm_world_loc,ierr)
+! check if seedname.dat is present
+  call check_seedname() 
   call comms_setup_vars
 !  print *, "Hello world", my_node_id, num_nodes
   !call comms_end
@@ -117,3 +121,43 @@ subroutine Compute_DMFT_from_amn(n_kpts_loc,n_wann,kpt_dft,wght_dft,band_win_loc
   call zcopy(n_wann**2*n_kpts,DMFT_evec_loc,1,DMFT_evec,1)
 
 end subroutine Compute_DMFT_from_amn
+subroutine EIGENVALNKIJ(mat, dimen, eig)
+
+    use constants
+    use utility, only: EIGENVALH
+
+    implicit none
+
+    integer, intent(in) :: dimen
+    complex(kind=dp), intent(in) :: mat(dimen,dimen)
+    real(kind=dp), intent(out) :: eig(dimen)
+
+    complex(kind=dp), allocatable :: mat_copy(:,:)
+
+! If copy is not made calling EIGENVALNKIJ changes the values of
+! n_kij.
+
+    allocate(mat_copy(dimen,dimen))
+    mat_copy = (0.0_dp, 0.0_dp)
+    mat_copy = mat
+
+    call EIGENVALH(mat_copy, dimen, eig)
+
+    deallocate(mat_copy)
+
+end subroutine EIGENVALNKIJ
+
+subroutine ParseWannier90(num_wannier)
+! Reads wannier90.chk to parse wannier90 info.
+
+    use read_inputs, only: Read_wan_chk, num_wann 
+
+    implicit none
+
+    integer, intent(out) :: num_wannier
+    
+    call Read_wan_chk()
+    num_wannier = num_wann
+
+end subroutine ParseWannier90
+

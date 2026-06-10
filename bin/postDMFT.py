@@ -1,51 +1,81 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import argparse
+import ast
 import copy
 import glob
+import itertools
 import math
 import os
 import re
+import shlex
 import shutil
+import math
 import subprocess
 import sys
 from argparse import RawTextHelpFormatter
+import warnings
 
+import matplotlib
+
+matplotlib.use("pdf")
+warnings.filterwarnings("ignore", module="matplotlib\..*")
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.interpolate
-# import matplotlib
-# matplotlib.use('ps')
 from matplotlib.font_manager import FontProperties, fontManager
 from pylab import *
 from scipy import *
 from scipy import interpolate
 
 import Fileio
-import oreo
-import Re_wt
+
+# import oreo
+# import Re_wt
 import Struct
 from INPUT import *
 from splash import welcome
 
 
+BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def python_command(script_name, *args):
+    parts = [sys.executable, os.path.join(BIN_DIR, script_name)]
+    parts.extend(str(arg) for arg in args)
+    return " ".join(shlex.quote(part) for part in parts)
+
+
+# Setting up plotting class
+plt.rcParams["mathtext.default"] = "regular"  # Roman ['rm', 'cal', 'it', 'tt', 'sf',
+#                                                   'bf', 'default', 'bb', 'frak',
+#                                                   'circled', 'scr', 'regular']
+plt.rc("font", size=22)  # controls default text sizes
+plt.rc("axes", titlesize=22)  # fontsize of the axes title
+plt.rc("axes", labelsize=22)  # fontsize of the x and y labels
+plt.rc("xtick", labelsize=22)  # fontsize of the tick labels
+plt.rc("ytick", labelsize=22)  # fontsize of the tick labels
+# plt.rc('legend', fontsize=22)    # legend fontsize
+# plt.rc('figure', titlesize=22)  # fontsize of the figure title
+
+
 class PostProcess:
-    """DMFTwDFT PostProcess
+    """DMFTwDFT post processing tool.
 
-	This class contains methods to perform post processing of the DMFT calculations.
-	Run inside the DMFT or HF directories.
+    This class contains methods to perform post processing of the DMFT calculations.
+    Run inside the DMFT or HF directories.
 
-	Run with:
-	postDMFT.py <options>
+    Usage:
+    postDMFT.py <options>
 
-	-h for help.
+    -h for help.
 
-	<options>:
-	ac    : Performs analytic continuation.
-	dos   : Performs density of states calculation.
-	bands : Performs band structure calculation.
+    <options>:
+    ac    : Performs analytic continuation.
+    dos   : Performs density of states calculation.
+    bands : Performs band structure calculation.
 
 
-	"""
+    """
 
     def __init__(self):
         """
@@ -64,8 +94,8 @@ class PostProcess:
 
     def checksig(self):
         """
-		Checks if Sig.out is created in the ac directory.
-		"""
+        Checks if Sig.out is created in the ac directory.
+        """
 
         if os.path.exists("./ac/Sig.out"):
             return True
@@ -75,8 +105,8 @@ class PostProcess:
 
     def interpol(self, emin, emax, rom, broaden, dest_dir, sp=False):
         """
-		This performs the interpolation of points on the real axis.
-		"""
+        This performs the interpolation of points on the real axis.
+        """
         print("\nInterpolating points on real axis...")
         headerline = 2
         om, Sig = Fileio.Read_complex_multilines("./ac/Sig.out", headerline)
@@ -85,28 +115,27 @@ class PostProcess:
         # The exec() function doesn't work properly on Python3 so I had to use a workaround:
         fi = open("./ac/Sig.out", "r")
         line1 = fi.readline()
-        s_oo = re.findall(r"\s*([0-9.+-]*)", line1)
-        while "" in s_oo:
-            s_oo.remove("")
+        s_oo = ast.literal_eval(
+            line1.split("=", 1)[1].strip().replace("np.float64(", "").replace(")", "")
+        )
         line2 = fi.readline()
-        Vdc = re.findall(r"\s*([0-9.+-]*)", line2)
-        while "" in Vdc:
-            Vdc.remove("")
+        Vdc = ast.literal_eval(
+            line2.split("=", 1)[1].strip().replace("np.float64(", "").replace(")", "")
+        )
 
-            # exec(ar[0])
-            # m=re.search('#(.*)',line)
-            # exec(m.group(1).strip())
+        # exec(ar[0])
+        # m=re.search('#(.*)',line)
+        # exec(m.group(1).strip())
         # s_oo_Vdc=np.array(s_oo)-array(Vdc)
         fi.close()
-        s_oo_Vdc = np.array((np.array(s_oo)).astype(np.float)) - np.array(
-            (np.array(Vdc)).astype(np.float)
+        s_oo_Vdc = np.array((np.array(s_oo)).astype(float)) - np.array(
+            (np.array(Vdc)).astype(float)
         )
 
         ommesh = np.linspace(emin, emax, rom)
 
         # non spin polarized case
         if sp == False:
-
             Sig_tot = np.zeros((len(Sig), rom), dtype=complex)
 
             for i in range(len(Sig)):
@@ -142,7 +171,6 @@ class PostProcess:
 
         # Spin polarized calculation
         if sp:
-
             Sig_tot = np.zeros((int(len(Sig) / 2), rom), dtype=complex)
             Sig_tot_dn = np.zeros((int(len(Sig) / 2), rom), dtype=complex)
 
@@ -208,8 +236,8 @@ class PostProcess:
 
     def anal_cont(self, args):
         """
-		This method performs the analytic continuation.
-		"""
+        This method performs the analytic continuation.
+        """
 
         siglistindx = args.siglistindx
 
@@ -230,7 +258,7 @@ class PostProcess:
         # averaging self energies
         print("\nAveraging self-energies from: ")
         print(siglist)
-        cmd = "cd ac && sigaver.py sig.inp.*"
+        cmd = "cd ac && " + python_command("sigaver.py") + " sig.inp.*"
         out, err = subprocess.Popen(
             cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         ).communicate()
@@ -251,7 +279,11 @@ class PostProcess:
 
         # Analytic continuation
         print("Running analytic continuation...")
-        cmd = "cd ac && maxent_run.py sig.inpx >ac.out 2>ac.error"
+        cmd = (
+            "cd ac && "
+            + python_command("maxent_run.py", "sig.inpx")
+            + " >ac.out 2>ac.error"
+        )
         out, err = subprocess.Popen(
             cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         ).communicate()
@@ -290,13 +322,14 @@ class PostProcess:
         return np.array(klist), np.array(dist_K), np.array(dist_SK)
 
     def genksum(self, rom, kpband):
+        T = 1 / float(pC["beta"][0])
         fp = open("./bands/ksum.input", "w")
         fp.write("%d" % kpband)
         fp.write("\n%d" % rom)
         fp.write("\n%d" % p["nspin"])
-        fp.write("\n%d" % 5)
-        fp.write("\n%d" % 5)
-        fp.write("\n%f" % 0.01)
+        fp.write("\n%d" % self.TB.ncor_orb)
+        fp.write("\n%d" % self.TB.max_cor_orb)
+        fp.write("\n%f" % T)
         fp.write("\n%d" % p["n_tot"])
         fp.write("\n%d" % p["mu_iter"])
         fp.close()
@@ -313,8 +346,8 @@ class PostProcess:
 
     def dos(self, args):
         """
-		This method performs the Density of States calculation.
-		"""
+        This method performs the Density of States calculation.
+        """
 
         dest_dir = "dos"
 
@@ -334,7 +367,7 @@ class PostProcess:
         self.interpol(args.emin, args.emax, args.rom, args.broaden, dest_dir, args.sp)
 
         # copying files from DMFT directory to dos directory
-        cmd = "cd dos && Copy_input.py ../ -post dos"
+        cmd = "cd dos && " + python_command("Copy_input.py", "../", "-post", "dos")
         out, err = subprocess.Popen(cmd, shell=True).communicate()
         if err:
             print("File copy failed!\n")
@@ -344,7 +377,6 @@ class PostProcess:
             print(out)
 
         if args.sp == False:
-
             # running dmft_dos.x
             print("Calculating DMFT DOS...")
             cmd = "cd dos && " + self.para_com + " " + "dmft_dos.x"
@@ -410,42 +442,105 @@ class PostProcess:
 
     def plot_dos(self, args):
         """
-		This method plots the density of states plot.
-		"""
+        This method plots the density of states plot.
+        """
+
+        # mapping d and p orbitals with atoms
+        d_indices = [i for i, x in enumerate(p["orbs"]) if x == "d"]
+        d_atoms = [p["atomnames"][i] for i in d_indices]
+
+        p_indices = [i for i, x in enumerate(p["orbs"]) if x == "p"]
+        p_atoms = [p["atomnames"][i] for i in p_indices]
+
+        # Finding the number of columns
+        fi = open("./dos/G_loc.out", "r")
+        firstline = fi.readline()
+        fi.close()
+        num_columns = len(firstline.split())
+
+        # index arrays for eg and t2g
+        eg_index = []
+        t2g_index = []
+        icounter_eg = 2
+        icounter_t2g = 4
+
+        # if cor_at has more than one atom,
+        # it will sum up the total contributions
+        for i0 in range(len(p["cor_at"])):
+            for i in range(len(p["cor_at"][0])):
+                # eg
+                eg_index.append(icounter_eg)
+                eg_index.append(icounter_eg + 6)
+                icounter_eg = icounter_eg + 10
+
+                # t2g
+                t2g_index.append(icounter_t2g)
+                t2g_index.append(icounter_t2g + 2)
+                t2g_index.append(icounter_t2g + 6)
+                icounter_t2g = icounter_t2g + 10
+
+        # index for p
+        # initialized by last index of t2g index array
+        if p_atoms:
+            p_index = []
+            icounter_p = t2g_index[-1] + 2
+            for i in range(icounter_p, num_columns, 2):
+                p_index.append(i)
+
+        print(("eg_index : %s" % eg_index))
+        print(("t2g_index : %s" % t2g_index))
+        print(("p_index : %s" % p_index))
+
         if args.sp == False:
             print("Plotting DOS...")
             with open("./dos/G_loc.out", "r") as f:
                 lines = f.readlines()
                 x = [float(line.split()[0]) for line in lines]
 
-                y_dz2 = [float(line.split()[2]) for line in lines]  # eg
-                y_x2y2 = [float(line.split()[8]) for line in lines]
-
-                y_dxz = [float(line.split()[4]) for line in lines]
-                y_dyz = [float(line.split()[6]) for line in lines]  # t2g
-                y_dxy = [float(line.split()[10]) for line in lines]
-
-                yg = [float(line.split()[2]) + float(line.split()[8]) for line in lines]
-                tg = [
-                    float(line.split()[4])
-                    + float(line.split()[6])
-                    + float(line.split()[10])
-                    for line in lines
+                # d-eg
+                y_eg_sum = [
+                    sum([float(line.split()[k]) for k in eg_index]) for line in lines
                 ]
 
-            y_eg = [-1 * count / 3.14 for count in yg]
-            y_t2g = [-1 * count / 3.14 for count in tg]
+                # d-t2g
+                y_t2g_sum = [
+                    sum([float(line.split()[k]) for k in t2g_index]) for line in lines
+                ]
 
-            plt.figure(1)
-            plt.plot(x, y_eg, "r", label="$d-e_g$")
-            plt.plot(x, y_t2g, "b", label="$d-t_{2g}$")
-            plt.title("DMFT PDOS")
-            plt.xlabel("Energy (eV)")
-            plt.ylabel("DOS (states eV/cell)")
-            plt.xlim(args.elim)
-            plt.axvline(x=0, color="gray", linestyle="--")
+                # px, px, pz
+                if p_atoms:
+                    y_p_sum = [
+                        sum([float(line.split()[k]) for k in p_index]) for line in lines
+                    ]
+
+            if p_atoms:
+                y_p = [-1 * count / math.pi for count in y_p_sum]
+            y_eg = [-1 * count / math.pi for count in y_eg_sum]
+            y_t2g = [-1 * count / math.pi for count in y_t2g_sum]
+
+            # Plotting
+            fig = plt.figure(figsize=(13, 9))
+            ax = fig.add_subplot(111)
+
+            if len(p["cor_at"]) < 2:
+                eg_label = p["atomnames"][0] + " $d-e_g$"
+                t2g_label = p["atomnames"][0] + " $d-t_{2g}$"
+            else:
+                eg_label = " $d-e_g$"
+                t2g_label = " $d-t_{2g}$"
+
+            ax.plot(x, y_eg, "r", label=eg_label)
+            ax.plot(x, y_t2g, "b", label=t2g_label)
+            if p_atoms:
+                p_label = p["atomnames"][1] + " $p$"
+                ax.plot(x, y_p, "g", label=p_label)
+            ax.set_title("DMFT PDOS")
+            ax.set_xlabel("Energy (eV)")
+            ax.set_ylabel("DOS (states eV/cell)")
+            ax.set_xlim(args.elim)
+            ax.axvline(x=0, color="gray", linestyle="--")
             plt.legend()
-            plt.savefig("./dos/DMFT-PDOS.png")
+            fig.savefig("./dos/DMFT-PDOS.png")
             if args.show:
                 plt.show()
             f.close()
@@ -457,68 +552,97 @@ class PostProcess:
                 lines = f.readlines()
                 x = [float(line.split()[0]) for line in lines]
 
-                y_dz2 = [float(line.split()[2]) for line in lines]  # eg
-                y_x2y2 = [float(line.split()[8]) for line in lines]
-
-                y_dxz = [float(line.split()[4]) for line in lines]
-                y_dyz = [float(line.split()[6]) for line in lines]  # t2g
-                y_dxy = [float(line.split()[10]) for line in lines]
-
-                yg = [float(line.split()[2]) + float(line.split()[8]) for line in lines]
-                tg = [
-                    float(line.split()[4])
-                    + float(line.split()[6])
-                    + float(line.split()[10])
-                    for line in lines
+                # d-eg spin up
+                y_eg_sum = [
+                    sum([float(line.split()[k]) for k in eg_index]) for line in lines
                 ]
 
-            y_eg = [-1 * count / 3.14 for count in yg]
-            y_t2g = [-1 * count / 3.14 for count in tg]
+                # d-t2g spin up
+                y_t2g_sum = [
+                    sum([float(line.split()[k]) for k in t2g_index]) for line in lines
+                ]
+
+                # px, px, pz
+                if p_atoms:
+                    y_p_sum = [
+                        sum([float(line.split()[k]) for k in p_index]) for line in lines
+                    ]
+
+            if p_atoms:
+                y_p = [-1 * count / 3.14 for count in y_p_sum]
+            y_eg = [-1 * count / 3.14 for count in y_eg_sum]
+            y_t2g = [-1 * count / 3.14 for count in y_t2g_sum]
 
             # spin down component
             with open("./dos/G_loc_dn.out", "r") as f:
                 lines = f.readlines()
                 x_dn = [float(line.split()[0]) for line in lines]
 
-                y_dz2_dn = [float(line.split()[2]) for line in lines]  # eg
-                y_x2y2_dn = [float(line.split()[8]) for line in lines]
-
-                y_dxz_dn = [float(line.split()[4]) for line in lines]
-                y_dyz_dn = [float(line.split()[6]) for line in lines]  # t2g
-                y_dxy_dn = [float(line.split()[10]) for line in lines]
-
-            yg_dn = [float(line.split()[2]) + float(line.split()[8]) for line in lines]
-            tg_dn = [
-                float(line.split()[4])
-                + float(line.split()[6])
-                + float(line.split()[10])
-                for line in lines
+            # d-eg spin down
+            y_eg_dn_sum = [
+                sum([float(line.split()[k]) for k in eg_index]) for line in lines
             ]
 
-            y_eg_dn = [1 * count / 3.14 for count in yg_dn]
-            y_t2g_dn = [1 * count / 3.14 for count in tg_dn]
+            # d-t2g spin down
+            y_t2g_dn_sum = [
+                sum([float(line.split()[k]) for k in t2g_index]) for line in lines
+            ]
 
-            plt.figure(1)
-            plt.plot(x, y_eg, "r", label="$d-e_g$")
-            plt.plot(x, y_t2g, "b", label="$d-t_{2g}$")
-            plt.plot(x_dn, y_eg_dn, "r")
-            plt.plot(x_dn, y_t2g_dn, "b")
-            plt.title("DMFT PDOS")
-            plt.xlabel("Energy (eV)")
-            plt.ylabel("DOS (states eV/cell)")
-            plt.axvline(x=0, color="gray", linestyle="--")
-            plt.axhline(y=0, color="gray", linestyle="--")
-            plt.xlim(min(min(x), min(x_dn)), max(max(x), max(x_dn)))
+            # px, px, pz
+            if p_atoms:
+                y_p_dn_sum = [
+                    sum([float(line.split()[k]) for k in p_index]) for line in lines
+                ]
+
+            # x -1 for spin down components
+            if p_atoms:
+                y_p_dn = [1 * count / 3.14 for count in y_p_dn_sum]
+            y_eg_dn = [1 * count / 3.14 for count in y_eg_dn_sum]
+            y_t2g_dn = [1 * count / 3.14 for count in y_t2g_dn_sum]
+
+            # Plotting
+            fig = plt.figure(figsize=(13, 9))
+            ax = fig.add_subplot(111)
+
+            if len(p["cor_at"]) < 2:
+                eg_label = p["atomnames"][0] + " $d-e_g$"
+                t2g_label = p["atomnames"][0] + " $d-t_{2g}$"
+            else:
+                eg_label = " $d-e_g$"
+                t2g_label = " $d-t_{2g}$"
+
+            ax.plot(x, y_eg, "r", label=eg_label)
+            ax.plot(x, y_t2g, "b", label=t2g_label)
+            ax.plot(x_dn, y_eg_dn, "r")
+            ax.plot(x_dn, y_t2g_dn, "b")
+            if p_atoms:
+                p_label = p["atomnames"][1] + " $p$"
+                ax.plot(x, y_p, "g", label=p_label)
+                ax.plot(x_dn, y_p_dn, "g")
+
+            ax.set_title("DMFT PDOS")
+            ax.set_xlabel("Energy (eV)")
+            ax.set_ylabel("DOS (states eV/cell)")
+            ax.axvline(x=0, color="gray", linestyle="--")
+            ax.axhline(y=0, color="gray", linestyle="--")
+            ax.set_xlim(min(min(x), min(x_dn)), max(max(x), max(x_dn)))
             plt.legend()
-            plt.savefig("./dos/DMFT-PDOS_sp.png")
+            fig.savefig("./dos/DMFT-PDOS_sp.png")
             if args.show:
                 plt.show()
             f.close()
 
     def bands(self, args):
         """
-		This method performs the band structure calculations.
-		"""
+        This method performs the band structure calculations.
+        """
+        if args.elim:
+            self.emin = args.elim[0]
+            self.emax = args.elim[1]
+        else:
+            self.emin = -6.0
+            self.emax = 6.0
+
         dest_dir = "bands"
         dummy_broaden = 1.0
 
@@ -538,33 +662,35 @@ class PostProcess:
             sys.exit()
 
         # interpolating
-        self.interpol(args.emin, args.emax, args.rom, dummy_broaden, dest_dir, sp)
+        self.interpol(self.emin, self.emax, args.rom, dummy_broaden, dest_dir, sp)
 
         #############################Xingu's contribution###################################################################################
 
         #########################Read POSCAR ###################################################
-        TB = Struct.TBstructure("POSCAR", p["atomnames"], p["orbs"])
+        self.TB = Struct.TBstructure("POSCAR", p["atomnames"], p["orbs"])
         cor_at = p["cor_at"]
         cor_orb = p["cor_orb"]
-        TB.Compute_cor_idx(cor_at, cor_orb)
+        self.TB.Compute_cor_idx(cor_at, cor_orb)
         ############################# Generate sequence list ##################################
         sort_atm = sorted([atm for atms in cor_at for atm in atms])
         atm_sqn = self.Make_coor_list(sort_atm, cor_at)
-        print("atm_sqn:%s" % atm_sqn)
+        # print("atm_sqn : %s" % atm_sqn)
         orb_sqn = []
         for i in atm_sqn:
             len_sf = 0
             for j in range(i):
-                len_sf += max(Make_coor_list(TB.TB_orbs[cor_at[j][0]], cor_orb[j])) + 1
-            orb_idx = self.Make_coor_list(TB.TB_orbs[cor_at[i][0]], cor_orb[i])
+                len_sf += (
+                    max(self.Make_coor_list(self.TB.TB_orbs[cor_at[j][0]], cor_orb[j]))
+                    + 1
+                )
+            orb_idx = self.Make_coor_list(self.TB.TB_orbs[cor_at[i][0]], cor_orb[i])
             for idx in orb_idx:
                 orb_sqn.append(idx + len_sf)
-        print("orb_sqn:%s" % orb_sqn)
+        # print("orb_sqn : %s" % orb_sqn)
         ################################# Read sig.inp_real ####################################
 
         # non spin-polarized calculation
         if sp == False:
-
             fi = open("./bands/sig.inp_real", "r")
             [nom, ncor_orb] = [int(ele) for ele in fi.readline().split()[-2:]]
             temperature = float(fi.readline().split()[-1])
@@ -587,7 +713,6 @@ class PostProcess:
 
         # spin polarized calculation
         if sp:
-
             siginpreal_files = ["sig.inp_real", "sig.inp_real_dn"]
             SigMooreal_files = ["SigMoo_real.out", "SigMoo_dn_real.out"]
             SigMdc_files = ["SigMdc.out", "SigMdc_dn.out"]
@@ -615,46 +740,67 @@ class PostProcess:
                 np.savetxt(filestr, SigMoo, fmt="%.10f")
                 ############################ Write SigMdc.out ########################
                 SigMdc = np.array([sigmdc_tmp[i] for i in orb_sqn])
-                print(sigmdc_tmp)
-                print(SigMdc)
+                # print(sigmdc_tmp)
+                # print(SigMdc)
                 filestr = "./bands/" + SigMdc_files[filecounter]
                 np.savetxt(filestr, SigMdc[None], fmt="%.12f")
 
         # ################################################################################################################
 
-        print("kpband=%s" % args.kpband)
-        print("kplist=%s" % args.kplist)
-        print("knames=%s" % args.knames)
+        if args.autokp or args.compare:
+            args.knames, ticks, discontinuities, args.kplist = self.readKPOINTS(args)
 
-        # generating k-path
-        klist, dist_K, dist_SK = self.Create_kpath(args.kplist, args.kpband)
-        fi = open("./bands/klist.dat", "w")
-        for i in range(args.kpband):
-            kcheck = 0
-            for j, d in enumerate(dist_SK):
-                if abs(dist_K[i] - d) < 1e-10:
-                    fi.write(
-                        "%.14f  %.14f  %.14f  %.14f  %s \n"
-                        % (
-                            dist_K[i],
-                            klist[i][0],
-                            klist[i][1],
-                            klist[i][2],
-                            args.knames[j],
-                        )
-                    )
-                    kcheck = 1
-                    break
-            if kcheck == 0:
-                fi.write(
-                    "%.14f  %.14f  %.14f  %.14f \n"
-                    % (dist_K[i], klist[i][0], klist[i][1], klist[i][2])
-                )
-        print("k-path generated.")
-        fi.close()
+        print(("kplist : %s" % args.kplist))
+        print(("knames : %s" % args.knames))
+
+        # Iterating args.kpband to get correct k-list.
+        indexerror = True
+
+        while indexerror:
+            try:
+                # generating k-path
+                klist, dist_K, dist_SK = self.Create_kpath(args.kplist, args.kpband)
+
+                with open("./bands/klist.dat", "w") as fi:
+                    # Put within try, exception to select correct kpband value.
+                    print(("Trying number of k-points (kpband) = %d" % args.kpband))
+                    for i in range(args.kpband):
+                        kcheck = 0
+                        for j, d in enumerate(dist_SK):
+                            # print(
+                            #     "i:%d dist_K: %s dist_SK: %s abs: %f"
+                            #     % (i, str(dist_K[i]), str(d), float(dist_K[i] - d))
+                            # )
+                            if abs(dist_K[i] - d) < 1e-10:
+                                fi.write(
+                                    "%.14f  %.14f  %.14f  %.14f  %s \n"
+                                    % (
+                                        dist_K[i],
+                                        klist[i][0],
+                                        klist[i][1],
+                                        klist[i][2],
+                                        args.knames[j],
+                                    )
+                                )
+                                kcheck = 1
+                                break
+                        if kcheck == 0:
+                            fi.write(
+                                "%.14f  %.14f  %.14f  %.14f \n"
+                                % (dist_K[i], klist[i][0], klist[i][1], klist[i][2])
+                            )
+
+                indexerror = False
+
+            except IndexError:
+                # Iterating args.kpband by 1.
+                args.kpband += 1
+                indexerror = True
+
+        print("k-path generated.\n")
 
         # copying files from DMFT directory to dos directory
-        cmd = "cd bands && Copy_input.py ../ -post bands"
+        cmd = "cd bands && " + python_command("Copy_input.py", "../", "-post", "bands")
         out, err = subprocess.Popen(cmd, shell=True).communicate()
         if err:
             print("File copy failed!\n")
@@ -712,15 +858,11 @@ class PostProcess:
 
     def plot_plain_bands(self, args):
         """
-		This method plots the regular DMFT band structure.
-		"""
+        This method plots the regular DMFT band structure.
+        """
 
         print("Plotting plain band structure...")
 
-        if args.vlim:
-            vmm = [args.vlim[0], args.vlim[1]]
-        else:
-            vmm = [0, 10.0]
         nk = 0
         SKP = []
         SKPoints = []
@@ -738,9 +880,9 @@ class PostProcess:
 
         fi = open("./bands/ksum.input", "r")
         numk = int(fi.readline())
-        print("numk=%s" % numk)
+        print(("numk = %s" % numk))
         nom = int(fi.readline())
-        print("nom=%s" % nom)
+        print(("nom = %s" % nom))
         fi.close()
         A_k = []
         dist_k = []
@@ -763,42 +905,80 @@ class PostProcess:
         (ymin, ymax) = (om[0][0], om[0][-1])
         (xmin, xmax) = (distk[0], distk[-1])
 
-        im = plt.imshow(
+        # Setting spectral function ranges.
+
+        if args.vlim is None and args.normalize:
+            vmax = max([max(p) for p in A_k])
+            vmin = min([min(p) for p in A_k])
+            norm = cm.colors.Normalize(vmax=vmax, vmin=vmin)
+            print(
+                ("Normalizing spectral function range to : [%.2f, %.2f]" % (vmin, vmax))
+            )
+
+        elif args.vlim and args.normalize:
+            vmax = args.vlim[1]
+            vmin = args.vlim[0]
+            norm = cm.colors.Normalize(vmax=vmax, vmin=vmin)
+            print(
+                ("Normalizing spectral function range to : [%.2f, %.2f]" % (vmin, vmax))
+            )
+
+        elif args.vlim and args.normalize is False:
+            vmax = args.vlim[1]
+            vmin = args.vlim[0]
+            norm = None
+            print(("Setting spectral function range to : [%.2f, %.2f]" % (vmin, vmax)))
+
+        else:
+            vmax = 10.0
+            vmin = 0.0
+            norm = None
+            print(("Setting spectral function range to : [%.2f, %.2f]" % (vmin, vmax)))
+
+        # Plotting
+        fig = plt.figure(figsize=(13, 9))
+        ax = fig.add_subplot(111)
+
+        im = ax.imshow(
             A_k,
-            cmap=cm.hot,
-            vmin=vmm[0],
-            vmax=vmm[1],
+            cmap=plt.get_cmap(args.cmap),
+            vmin=None if norm is not None else vmin,
+            vmax=None if norm is not None else vmax,
+            norm=norm,
             extent=[xmin, xmax, ymin, ymax],
             aspect="auto",
         )
-        colorbar(
+        cb = fig.colorbar(
             im,
             orientation="vertical",
             pad=0.05,
             shrink=1.0,
-            ticks=np.arange(0, 10.0, 1.0),
+            ax=ax,
         )
-        xticks(SKP, SKPoints)
-        xlabel("k-path", fontsize="xx-large")
-        ylabel("Energy", fontsize="xx-large")
-        axhline(y=0, color="black", ls="--")
+        cb.ax.tick_params()
 
-        savefig("./bands/A_k.eps", format="eps", dpi=1200)
+        ax.set_xticks(SKP)
+        ax.set_xticklabels(SKPoints)
+        ax.set_xlabel(r"$k$-path")
+        ax.set_ylabel(r"$E-E_F$ (eV)")
+        ax.axhline(y=0, color="black", ls="--")
+
+        fig.tight_layout()
+
+        if args.compare:
+            fig, ax = self.plotDFTBands(args, fig=fig, ax=ax)
+
         if args.show:
-            show()
+            plt.show()
+        fig.savefig("./bands/A_k.pdf", format="pdf", dpi=300)
 
     def plot_partial_bands(self, args):
         """
-		This method plots partial bands for orbitals. The order of the orbitals is the Wannier orbital order.
-		"""
+        This method plots partial bands for orbitals. The order of the orbitals is the Wannier orbital order.
+        """
 
-        print("Plotting projected band structure...")
-        print("Wannier orbitals list:", args.wanorbs)
+        print(("Wannier orbitals list : %s" % str(args.wanorbs)))
 
-        if args.vlim:
-            vmm = [args.vlim[0], args.vlim[1]]
-        else:
-            vmm = [0, 10.0]
         SKP = []
         SKPoints = []
         distk = []
@@ -815,9 +995,9 @@ class PostProcess:
 
         fi = open("./bands/ksum.input", "r")
         numk = int(fi.readline())
-        print("numk=%s" % numk)
+        print(("numk = %s" % numk))
         nom = int(fi.readline())
-        print("nom=%s" % nom)
+        print(("nom = %s" % nom))
         fi.close()
 
         A_k = []
@@ -864,42 +1044,80 @@ class PostProcess:
         (ymin, ymax) = (om[0][0], om[0][-1])  # 500x100 energy matrix
         (xmin, xmax) = (distk[0], distk[-1])
 
-        im = plt.imshow(
+        # Setting spectral function ranges.
+
+        if args.vlim is None and args.normalize:
+            vmax = max([max(p) for p in A_ktotal])
+            vmin = min([min(p) for p in A_ktotal])
+            norm = cm.colors.Normalize(vmax=vmax, vmin=vmin)
+            print(
+                ("Normalizing spectral function range to : [%.2f, %.2f]" % (vmin, vmax))
+            )
+
+        elif args.vlim and args.normalize:
+            vmax = args.vlim[1]
+            vmin = args.vlim[0]
+            norm = cm.colors.Normalize(vmax=vmax, vmin=vmin)
+            print(
+                ("Normalizing spectral function range to : [%.2f, %.2f]" % (vmin, vmax))
+            )
+
+        elif args.vlim and args.normalize is False:
+            vmax = args.vlim[1]
+            vmin = args.vlim[0]
+            norm = None
+            print(("Setting spectral function range to : [%.2f, %.2f]" % (vmin, vmax)))
+
+        else:
+            vmax = 10.0
+            vmin = 0.0
+            norm = None
+            print(("Setting spectral function range to : [%.2f, %.2f]" % (vmin, vmax)))
+
+        # Plotting
+        fig = plt.figure(figsize=(13, 9))
+        ax = fig.add_subplot(111)
+
+        im = ax.imshow(
             A_ktotal,
-            cmap=cm.hot,
+            cmap=plt.get_cmap(args.cmap),
+            vmin=None if norm is not None else vmin,
+            vmax=None if norm is not None else vmax,
+            norm=norm,
             extent=[xmin, xmax, ymin, ymax],
             aspect="auto",
-            vmin=vmm[0],
-            vmax=vmm[1],
         )
-
-        colorbar(
+        cb = fig.colorbar(
             im,
             orientation="vertical",
             pad=0.05,
             shrink=1.0,
-            ticks=np.arange(0, 10.0, 1.0),
+            ax=ax,
         )
-        xticks(SKP, SKPoints)
-        xlabel("k-path", fontsize="xx-large")
-        ylabel("Energy", fontsize="xx-large")
-        axhline(y=0, color="black", ls="--")
+        cb.ax.tick_params()
 
-        plt.savefig("./bands/A_k_partial.eps", format="eps", dpi=1200)
+        ax.set_xticks(SKP)
+        ax.set_xticklabels(SKPoints)
+        ax.set_xlabel(r"$k$-path")
+        ax.set_ylabel(r"$E-E_F$ (eV)")
+        ax.axhline(y=0, color="black", ls="--")
+
+        fig.tight_layout()
+
+        if args.compare:
+            fig, ax = self.plotDFTBands(args, fig=fig, ax=ax)
+
         if args.show:
-            show()
+            plt.show()
+        fig.savefig("./bands/A_k_partial.eps", format="eps", dpi=1200)
 
     def plot_sp_bands(self, args):
         """
-		This method plots spin-polarized bands.
-		"""
+        This method plots spin-polarized bands.
+        """
 
         print("Plotting spin-polarized band structure...")
 
-        if args.vlim:
-            vmm = [args.vlim[0], args.vlim[1]]
-        else:
-            vmm = [0, 10.0]
         nk = 0
         SKP = []
         SKPoints = []
@@ -918,9 +1136,9 @@ class PostProcess:
         # Spin up dataset
         fi = open("./bands/ksum.input", "r")
         numk = int(fi.readline())
-        print("numk=%s" % numk)
+        print(("numk = %s" % numk))
         nom = int(fi.readline())
-        print("nom=%s" % nom)
+        print(("nom = %s" % nom))
         fi.close()
         A_k = []
         dist_k = []
@@ -960,229 +1178,530 @@ class PostProcess:
         (ymin, ymax) = (om[0][0], om[0][-1])
         (xmin, xmax) = (distk[0], distk[-1])
 
-        # subplots
-        # spin up
-        fig = plt.figure()
-        a = fig.add_subplot(1, 2, 1)
-        im = plt.imshow(
-            A_k,
-            cmap=cm.hot,
-            vmin=vmm[0],
-            vmax=vmm[1],
-            extent=[xmin, xmax, ymin, ymax],
-            aspect="auto",
-        )
-        a.set_title("Spin Up")
-        # colorbar(im,orientation='vertical',pad=0.05,shrink=1.0,ticks=arange(0,10.0,1.0))
-        xticks(SKP, SKPoints)
-        # xlabel('k-path',fontsize='xx-large')
-        # ylabel('Energy',fontsize='xx-large')
-        axhline(y=0, color="black", ls="--")
+        # Setting spectral function ranges.
 
-        # spin down
-        a = fig.add_subplot(1, 2, 2)
-        im2 = plt.imshow(
-            A_k2,
-            cmap=cm.hot,
-            vmin=vmm[0],
-            vmax=vmm[1],
-            extent=[xmin, xmax, ymin, ymax],
-            aspect="auto",
-        )
-        a.set_title("Spin Down")
-        # colorbar(im2,orientation='vertical',pad=0.05,shrink=1.0,ticks=arange(0,10.0,1.0))
-        xticks(SKP, SKPoints)
-        # xlabel('k-path',fontsize='xx-large')
-        # ylabel('Energy',fontsize='xx-large')
-        axhline(y=0, color="black", ls="--")
+        if args.vlim is None and args.normalize:
+            vmax1 = max([max(p) for p in A_k])
+            vmin1 = min([min(p) for p in A_k])
+            vmax2 = max([max(p) for p in A_k2])
+            vmin2 = min([min(p) for p in A_k2])
+            vmax = max([vmax1, vmax2])
+            vmin = min([vmin1, vmin2])
+            norm = cm.colors.Normalize(vmax=vmax, vmin=vmin)
+            print(
+                ("Normalizing spectral function range to : [%.2f, %.2f]" % (vmin, vmax))
+            )
 
-        # ax1=subplot(111)
-        # for i in range(18,np.shape(eigval0)[1]):
-        #   ax1.plot(k_eig,eigval0[:,i]-7.22220722842 ,color='green')
-        ##ax1.plot([k_eig[319],k_eig[319]], [ymin,ymax], 'w-')
-        # xticks([0,1,2],['$\Gamma$','X','M'])
+        elif args.vlim and args.normalize:
+            vmax = args.vlim[1]
+            vmin = args.vlim[0]
+            norm = cm.colors.Normalize(vmax=vmax, vmin=vmin)
+            print(
+                ("Normalizing spectral function range to : [%.2f, %.2f]" % (vmin, vmax))
+            )
 
-        # Set common labels
-        fig.text(0.45, 0.04, "k-path", ha="center", va="center")
-        fig.text(0.06, 0.5, "Energy", ha="center", va="center", rotation="vertical")
+        elif args.vlim and args.normalize is False:
+            vmax = args.vlim[1]
+            vmin = args.vlim[0]
+            norm = None
+            print(("Setting spectral function range to : [%.2f, %.2f]" % (vmin, vmax)))
 
-        # common colorbar
-        fig.subplots_adjust(right=0.8)
-        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-        fig.colorbar(
-            im2,
-            orientation="vertical",
-            pad=0.05,
-            shrink=1.0,
-            ticks=np.arange(0, 10.0, 1.0),
-            cax=cbar_ax,
-        )
+        else:
+            vmax = 10.0
+            vmin = 0.0
+            norm = None
+            print(("Setting spectral function range to : [%.2f, %.2f]" % (vmin, vmax)))
 
-        savefig("./bands/A_k_sp.eps", format="eps", dpi=1200)
-        if args.show:
-            show()
+        # Plotting
+        fig = plt.figure(figsize=(13, 9))
 
-    def oreo_call(self, args):
-        """
-		This calls oreo.py
-		"""
-        oreo.oreo(args.trigger, args.trig1, args.bands, args.flag, args.begin, args.kpt)
+        if args.sp and args.spinup is False and args.spindown is False:
+            # subplots
 
-    def re_wt_call(self, args):
-        """
-		This calls Re_wt.py
-		"""
-        Re_wt.re_wt(
-            args.trigger,
-            args.count,
-            args.bands,
-            args.trig1,
-            args.dof,
-            args.xwt,
-            args.ywt,
-            args.zwt,
-            args.strang,
-            args.begin,
-            args.kpt,
-        )
+            # Big subplot
+            ax = fig.add_subplot(111)
+            # Turn off axis lines and ticks of the big subplot
+            ax.spines["top"].set_color("none")
+            ax.spines["bottom"].set_color("none")
+            ax.spines["left"].set_color("none")
+            ax.spines["right"].set_color("none")
+            ax.tick_params(
+                labelcolor="w", top=False, bottom=False, left=False, right=False
+            )
+
+            # spin up
+            ax1 = fig.add_subplot(1, 2, 1)
+            im1 = ax1.imshow(
+                A_k,
+                cmap=plt.get_cmap(args.cmap),
+                vmin=None if norm is not None else vmin,
+                vmax=None if norm is not None else vmax,
+                norm=norm,
+                extent=[xmin, xmax, ymin, ymax],
+                aspect="auto",
+            )
+            cb1 = fig.colorbar(
+                im1,
+                orientation="vertical",
+                pad=0.05,
+                shrink=1.0,
+                ax=ax1,
+            )
+            cb1.ax.tick_params()
+            ax1.set_title("Spin Up")
+            ax1.set_xticks(SKP)
+            ax1.set_xticklabels(SKPoints)
+            ax1.axhline(y=0, color="black", ls="--")
+
+            # spin down
+            ax2 = fig.add_subplot(1, 2, 2)
+            im2 = ax2.imshow(
+                A_k2,
+                cmap=plt.get_cmap(args.cmap),
+                vmin=None if norm is not None else vmin,
+                vmax=None if norm is not None else vmax,
+                norm=norm,
+                extent=[xmin, xmax, ymin, ymax],
+                aspect="auto",
+            )
+            cb2 = fig.colorbar(
+                im2,
+                orientation="vertical",
+                pad=0.05,
+                shrink=1.0,
+                ax=ax2,
+            )
+            cb2.ax.tick_params()
+            ax2.set_title("Spin Down")
+            ax2.set_xticks(SKP)
+            ax2.set_xticklabels(SKPoints)
+            ax2.axhline(y=0, color="black", ls="--")
+
+            # Set common labels
+            ax.set_xlabel(r"$k$-path")
+            ax.set_ylabel(r"$E-E_F$ (eV)")
+
+            # Set common labels
+            # fig.text(0.2, 0.04, "$k$-path", ha="center", va="center")
+            # fig.text(0.5, 0.2, "$E-E_F$", ha="center", va="center", rotation="vertical")
+
+            # common colorbar
+            # fig.subplots_adjust(right=0.8)
+            # cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+            # cb = fig.colorbar(
+            #     im, orientation="vertical", pad=0.05, shrink=1.0, cax=cbar_ax,
+            # )
+            # cb.ax.tick_params()
+
+            fig.tight_layout()
+
+            if args.compare:
+                fig, ax1 = self.plotDFTBands(args, fig=fig, ax=ax1)
+                fig, ax2 = self.plotDFTBands(args, fig=fig, ax=ax2)
+
+            if args.show:
+                show()
+            fig.savefig("./bands/A_k_sp.eps", format="eps", dpi=1200)
+
+        elif args.sp and args.spinup and args.spindown is False:
+            # Plotting only spin up bands
+            ax = fig.add_subplot(111)
+
+            im = ax.imshow(
+                A_k,
+                cmap=plt.get_cmap(args.cmap),
+                vmin=None if norm is not None else vmin,
+                vmax=None if norm is not None else vmax,
+                norm=norm,
+                extent=[xmin, xmax, ymin, ymax],
+                aspect="auto",
+            )
+            cb = fig.colorbar(
+                im,
+                orientation="vertical",
+                pad=0.05,
+                shrink=1.0,
+                ax=ax,
+            )
+            cb.ax.tick_params()
+
+            ax.set_title("Spin Up")
+            ax.set_xticks(SKP)
+            ax.set_xticklabels(SKPoints)
+            ax.set_xlabel(r"$k$-path")
+            ax.set_ylabel(r"$E-E_F$ (eV)")
+            ax.axhline(y=0, color="black", ls="--")
+
+            fig.tight_layout()
+
+            if args.compare:
+                fig, ax = self.plotDFTBands(args, fig=fig, ax=ax)
+
+            if args.show:
+                plt.show()
+            fig.savefig("./bands/A_k_spinup.eps", format="eps", dpi=1200)
+
+        elif args.sp and args.spindown and args.spinup is False:
+            # Plotting only spin down bands
+            ax = fig.add_subplot(111)
+
+            im = ax.imshow(
+                A_k2,
+                cmap=plt.get_cmap(args.cmap),
+                vmin=None if norm is not None else vmin,
+                vmax=None if norm is not None else vmax,
+                norm=norm,
+                extent=[xmin, xmax, ymin, ymax],
+                aspect="auto",
+            )
+            cb = fig.colorbar(
+                im,
+                orientation="vertical",
+                pad=0.05,
+                shrink=1.0,
+                ax=ax,
+            )
+            cb.ax.tick_params()
+
+            ax.set_title("Spin Down")
+            ax.set_xticks(SKP)
+            ax.set_xticklabels(SKPoints)
+            ax.set_xlabel(r"$k$-path")
+            ax.set_ylabel(r"$E-E_F$ (eV)")
+            ax.axhline(y=0, color="black", ls="--")
+
+            fig.tight_layout()
+
+            if args.compare:
+                fig, ax = self.plotDFTBands(args, fig=fig, ax=ax)
+
+            if args.show:
+                plt.show()
+            fig.savefig("./bands/A_k_spindown.eps", format="eps", dpi=1200)
+
+    def plotDFTBands(self, args, fig=None, ax=None):
+        """This function plots DFT bands using the
+        EIGENVAL file."""
+
+        # plotting style
+        marker = "."
+        markersize = 0.01
+        color = "lawngreen"
+        linewidth = 0.25
+        linestyle = "dashed"
+
+        ##### Reading the EIGENVAL file #####
+
+        fi = open("EIGENVAL", "r")
+        for i in range(5):
+            skip = fi.readline()
+        header = fi.readline()
+        skip = fi.readline()
+        data = fi.readlines()
+        fi.close()
+
+        numkpoints = int(header.split()[1])
+        numbands = int(header.split()[2])
+
+        kpoints = np.zeros((numkpoints, 3), dtype="float64")
+        bands = np.zeros((numkpoints, numbands), dtype="float64")
+
+        kpointscounter = 0
+        for i in data:
+            if len(i.split()) == 4:
+                kpoints[kpointscounter, :] = [float(x) for x in i.split()[0:3]]
+                kpointscounter += 1
+            if len(i.split()) == 3:
+                bands[kpointscounter - 1, int(i.split()[0]) - 1] = float(i.split()[1])
+
+        # Reading OUTCAR from initial DFT calculation to get Fermi energy
+        fi = open(args.outcar, "r")
+        for line in fi:
+            if re.search("Fermi energy", line) or re.search("E-fermi", line):
+                line_fermi = line
+        val = re.search(r"(\-?\d+\.?\d*)", line_fermi)
+        fermi = float(val.group(1))
+        fi.close()
+
+        # get knames and kticks from readKPOINTS()
+        ticksNames, ticks, discontinuities, kplist = self.readKPOINTS(args)
+
+        ##### Plotting bands #####
+
+        bands = (bands.transpose() - np.array(fermi)).transpose()
+        bands = bands.transpose()
+
+        if kpoints is not None:
+            xaxis = [0]
+
+            #### MODIFIED FOR DISCONTINOUS BANDS ####
+            if ticks:
+                # counters for number of discontinuities
+                icounter = 1
+                ii = 0
+
+                for i in range(1, len(kpoints) - len(discontinuities)):
+                    d = kpoints[icounter] - kpoints[icounter - 1]
+                    d = np.sqrt(np.dot(d, d))
+                    xaxis.append(d + xaxis[-1])
+                    icounter += 1
+                    ii += 1
+                    if ii in discontinuities:
+                        icounter += 1
+                        ii += 1
+                        xaxis.append(xaxis[-1])
+                xaxis = np.array(xaxis)
+
+                # plotting
+                for i_tick in range(len(ticks) - 1):
+                    x = xaxis[ticks[i_tick] : ticks[i_tick + 1] + 1]
+                    y = bands.transpose()[ticks[i_tick] : ticks[i_tick + 1] + 1, :]
+                    ax.plot(
+                        x,
+                        y,
+                        marker=marker,
+                        markersize=markersize,
+                        color=color,
+                        linewidth=linewidth,
+                        linestyle=linestyle,
+                    )
+
+            #### END  OF MODIFIED DISCONTINUOUS BANDS ####
+
+        ax.set_xlim(xaxis.min(), xaxis.max())
+
+        # Handling ticks
+        if ticks:
+            # added for meta-GGA calculations
+            if ticks[0] > 0:
+                ax.set_xlim(left=xaxis[ticks[0]])
+            ticks = [xaxis[x] for x in ticks]
+            ax.set_xticks(ticks)
+            ax.set_xticklabels(ticksNames)
+            ax.set_ylim([self.emin, self.emax])
+            # for xc in ticks:
+            #    ax.axvline(x=xc, color="k")
+        # ax.axhline(color="black", linestyle="--")
+
+        return fig, ax
+
+    def readKPOINTS(self, args):
+        """Reads KPOINTS file to get knames and kticks."""
+
+        ##### Reading the KPOINTS file #####
+
+        # Getting the high symmetry point names from KPOINTS file
+        f = open("KPOINTS", "r")
+        KPread = f.read()
+        f.close()
+
+        KPmatrix = re.findall("reciprocal[\s\S]*", KPread)
+        tick_labels = np.array(re.findall("!\s*(.*)", KPmatrix[0]))
+        knames = []
+        knames = [tick_labels[0]]
+
+        # Creating kplist
+        splitarray = KPmatrix[0].split("!")
+        kplist = []
+        for i in splitarray[0:-1]:
+            kplist.append([float(x) for x in i.split()[-3:]])
+        kplist = list(kplist for kplist, _ in itertools.groupby(kplist))
+
+        # Checking for discontinuities
+        discont_indx = []
+        icounter = 1
+        while icounter < len(tick_labels) - 1:
+            if tick_labels[icounter] == tick_labels[icounter + 1]:
+                knames.append(tick_labels[icounter])
+                icounter = icounter + 2
+            else:
+                discont_indx.append(icounter)
+                knames.append(tick_labels[icounter] + "|" + tick_labels[icounter + 1])
+                icounter = icounter + 2
+        knames.append(tick_labels[-1])
+        discont_indx = list(dict.fromkeys(discont_indx))
+
+        # End of discontinuity check
+
+        # Improve latex rendering
+        for i in range(len(knames)):
+            if knames[i] == "GAMMA":
+                knames[i] = "\Gamma"
+            else:
+                pass
+        knames = [str("$" + latx + "$") for latx in knames]
+
+        # getting the number of grid points from the KPOINTS file
+        f2 = open("KPOINTS", "r")
+        KPreadlines = f2.readlines()
+        f2.close()
+        numgridpoints = int(KPreadlines[1].split()[0])
+
+        kticks = [0]
+        gridpoint = 0
+        for kt in range(len(knames) - 1):
+            gridpoint = gridpoint + numgridpoints
+            kticks.append(gridpoint - 1)
+
+        # creating an array for discontunuity k-points. These are the indexes
+        # of the discontinuity k-points.
+        discontinuities = []
+        for k in discont_indx:
+            discontinuities.append(kticks[int(k / 2) + 1])
+        if discontinuities:
+            print(("discont. list  : %s " % str(discontinuities)))
+
+        return knames, kticks, discontinuities, kplist
 
 
 if __name__ == "__main__":
+    args = sys.argv[1:]
+    if args:
+        welcome()
+        des = "This script performs Analytic Contiunation, Density of States and Band structure calculations from DMFTwDFT outputs.\nRun inside DMFT or HF directory."
+        parser = argparse.ArgumentParser(
+            description=des, formatter_class=RawTextHelpFormatter
+        )
+        subparsers = parser.add_subparsers(help="sub-command help")
 
-    # top level parser
-    # print(
-    #    "\n----------------------------------------------- \n| Welcome to the DMFTwDFT post-processing tool |\n-----------------------------------------------\n"
-    # )
-    welcome()
-    des = "This script performs Analytic Contiunation, Density of States and Band structure calculations from DMFTwDFT outputs."
-    parser = argparse.ArgumentParser(
-        description=des, formatter_class=RawTextHelpFormatter
-    )
-    subparsers = parser.add_subparsers(help="sub-command help")
+        # parser for ac
+        parser_ac = subparsers.add_parser("ac", help="Analytic Continuation")
+        parser_ac.add_argument(
+            "-siglistindx",
+            default=2,
+            type=int,
+            help="How many last self energy files to average?",
+        )
+        parser_ac.set_defaults(func=PostProcess().anal_cont)
 
-    # parser for ac
-    parser_ac = subparsers.add_parser("ac", help="Analytic Continuation")
-    parser_ac.add_argument(
-        "-siglistindx",
-        default=2,
-        type=int,
-        help="How many last self energy files to average?",
-    )
-    parser_ac.set_defaults(func=PostProcess().anal_cont)
+        # parser for dos
+        parser_dos = subparsers.add_parser("dos", help="DMFT Density of States")
+        parser_dos.add_argument(
+            "-emin", default=-5.0, type=float, help="Minimum value for interpolation"
+        )
+        parser_dos.add_argument(
+            "-emax", default=5.0, type=float, help="Maximum value for interpolation"
+        )
+        parser_dos.add_argument(
+            "-sp", action="store_true", help="Flag to plot spin-polarized DOS"
+        )
+        parser_dos.add_argument(
+            "-rom", default=1000, type=int, help="Matsubara Frequency (omega) points"
+        )
+        parser_dos.add_argument("-broaden", default=0.03, type=float, help="Broadening")
+        parser_dos.add_argument(
+            "-show", action="store_true", help="Display the density of states"
+        )
+        parser_dos.add_argument(
+            "-elim", type=float, nargs=2, help="Energy range to plot"
+        )
+        parser_dos.set_defaults(func=PostProcess().dos)
 
-    # parser for dos
-    parser_dos = subparsers.add_parser("dos", help="DMFT Density of States")
-    parser_dos.add_argument(
-        "-emin", default=-5.0, type=float, help="Minimum value for interpolation"
-    )
-    parser_dos.add_argument(
-        "-emax", default=5.0, type=float, help="Maximum value for interpolation"
-    )
-    parser_dos.add_argument(
-        "-sp", action="store_true", help="Flag to plot spin-polarized DOS"
-    )
-    parser_dos.add_argument(
-        "-rom", default=1000, type=int, help="Matsubara Frequency (omega) points"
-    )
-    parser_dos.add_argument("-broaden", default=0.03, type=float, help="Broadening")
-    parser_dos.add_argument(
-        "-show", action="store_true", help="Display the density of states"
-    )
-    parser_dos.add_argument("-elim", type=float, nargs=2, help="Energy range to plot")
-    parser_dos.set_defaults(func=PostProcess().dos)
+        # parser for bands
+        parser_bands = subparsers.add_parser("bands", help="DMFT Bandstructure")
+        parser_bands.add_argument(
+            "-elim", type=float, nargs=2, help="Energy range to plot"
+        )
+        parser_bands.add_argument(
+            "-rom", default=1000, type=int, help="Matsubara Frequency (omega) points"
+        )
+        parser_bands.add_argument(
+            "-kpband",
+            default=500,
+            type=int,
+            help="Number of k-points for band structure calculation",
+        )
+        parser_bands.add_argument(
+            "-kn",
+            "--knames",
+            default=["$\Gamma$", "$X$", "$M$", "$\Gamma$", "$R$"],
+            type=str,
+            nargs="+",
+            help="Names of the k-points",
+        )
+        parser_bands.add_argument(
+            "-kp",
+            "--kplist",
+            default=[[0, 0, 0], [0.5, 0, 0], [0.5, 0.5, 0], [0, 0, 0], [0.5, 0.5, 0.5]],
+            type=int,
+            nargs="+",
+            action="append",
+            help="List of k-points as an array",
+        )
+        parser_bands.add_argument(
+            "-autokp",
+            action="store_true",
+            help="Flag to use KPOINTS file to obtain k-path.",
+        )
+        parser_bands.add_argument(
+            "-cmap",
+            default="hot",
+            type=str,
+            help="Colormap to use for plotting spectral function.",
+        )
+        parser_bands.add_argument(
+            "-plotplain", action="store_true", help="Flag to plot plain band structure"
+        )
+        parser_bands.add_argument(
+            "-sp",
+            action="store_true",
+            help="Flag to plot spin-polarized band structure. Default plots both spin up and spin down plots on the same figure.",
+        )
+        parser_bands.add_argument(
+            "-spinup",
+            action="store_true",
+            help="Flag to plot spin up band structure separately.",
+        )
 
-    # parser for bands
-    parser_bands = subparsers.add_parser("bands", help="DMFT Bandstructure")
-    parser_bands.add_argument(
-        "-emin", default=-5.0, type=float, help="Minimum value for interpolation"
-    )
-    parser_bands.add_argument(
-        "-emax", default=5.0, type=float, help="Maximum value for interpolation"
-    )
-    parser_bands.add_argument(
-        "-rom", default=1000, type=int, help="Matsubara Frequency (omega) points"
-    )
-    parser_bands.add_argument(
-        "-kpband",
-        default=500,
-        type=int,
-        help="Number of k-points for band structure calculation",
-    )
-    parser_bands.add_argument(
-        "-kn",
-        "--knames",
-        default=["$\Gamma$", "X", "M", "$\Gamma$", "R"],
-        type=str,
-        nargs="+",
-        help="Names of the k-points",
-    )
-    parser_bands.add_argument(
-        "-kp",
-        "--kplist",
-        default=[[0, 0, 0], [0.5, 0, 0], [0.5, 0.5, 0], [0, 0, 0], [0.5, 0.5, 0.5]],
-        type=int,
-        nargs="+",
-        action="append",
-        help="List of k-points as an array",
-    )
-    parser_bands.add_argument(
-        "-plotplain", action="store_true", help="Flag to plot plain band structure"
-    )
-    parser_bands.add_argument(
-        "-sp", action="store_true", help="Flag to plot spin-polarized band structure"
-    )
-    parser_bands.add_argument(
-        "-plotpartial",
-        action="store_true",
-        help="Flag to plot projected band structure",
-    )
-    parser_bands.add_argument(
-        "-wo",
-        "--wanorbs",
-        default=[4, 5, 6, 7, 8],
-        type=int,
-        nargs="+",
-        help="List of Wannier orbitals to project",
-    )
-    parser_bands.add_argument(
-        "-vlim", type=float, nargs=2, help="Spectral intensity range"
-    )
-    parser_bands.add_argument("-show", action="store_true", help="Display the bands")
-    parser_bands.set_defaults(func=PostProcess().bands)
+        parser_bands.add_argument(
+            "-spindown",
+            action="store_true",
+            help="Flag to plot spin down band structure separately.",
+        )
+        parser_bands.add_argument(
+            "-compare",
+            action="store_true",
+            help="Compare with DFT band structure (requires KPOINTS and EIGENVAL).",
+        )
+        parser_bands.add_argument(
+            "-outcar",
+            type=str,
+            help="SCF OUTCAR file for DFT vs. DMFT band structure comparison.",
+            default="OUTCAR",
+        )
 
-    # parser for oreo
-    parser_oreo = subparsers.add_parser("oreo", help="Runs oreo.py")
-    parser_oreo.add_argument("-trigger", default="Degree", type=str, help="trigger")
-    parser_oreo.add_argument("-trig1", default="band No.", type=str, help="trig1")
-    parser_oreo.add_argument("-bands", default=5, type=int, help="No. of bands")
-    parser_oreo.add_argument("-flag", default="-1", type=str, help="flag")
-    parser_oreo.add_argument("-begin", default=1000, type=int, help="begin")
-    parser_oreo.add_argument("-kpt", default=1, type=int, help="kpt")
-    parser_oreo.set_defaults(func=PostProcess().oreo_call)
+        parser_bands.add_argument(
+            "-plotpartial",
+            action="store_true",
+            help="Flag to plot projected band structure",
+        )
+        parser_bands.add_argument(
+            "-wo",
+            "--wanorbs",
+            default=[1, 4],
+            type=int,
+            nargs="+",
+            help="List of Wannier orbitals to project. Ordering follows atom order in structure and the Wannier orbital order. Starts from 1.",
+        )
+        parser_bands.add_argument(
+            "-vlim",
+            type=float,
+            nargs=2,
+            help="Spectral intensity range. If -normalize flag is set,\
+            this will correspond to the min and max values of the normalization range.",
+        )
+        parser_bands.add_argument(
+            "-normalize",
+            action="store_true",
+            help="Normalize spectral intensity range. -vlim sets range.",
+        )
+        parser_bands.add_argument(
+            "-show", action="store_true", help="Display the bands"
+        )
+        parser_bands.set_defaults(func=PostProcess().bands)
 
-    # parser for Re_wt
-    parser_re_wt = subparsers.add_parser("Re_wt", help="Runs Re_wt.py")
-    parser_re_wt.add_argument(
-        "-trigger",
-        default="Degree",
-        type=str,
-        help="Which deg. of fredom do you want from OUTCAR?\n (Please mind your whitespace and if mode is imaginary):",
-    )
-    parser_re_wt.add_argument(
-        "-count", default=1, type=int, help="How many atoms are there:"
-    )
-    parser_re_wt.add_argument(
-        "-bands", default=5, type=int, help="How many Bloch bands did you use:"
-    )
-    parser_re_wt.add_argument("-trig1", default="band No.", type=str, help="trig1")
-    parser_re_wt.add_argument("-dof", default=1, type=int, help="dof")
-    parser_re_wt.add_argument("-xwt", default=0, type=float, help="xwt")
-    parser_re_wt.add_argument("-ywt", default=0, type=float, help="ywt")
-    parser_re_wt.add_argument("-zwt", default=0, type=float, help="zwt")
-    parser_re_wt.add_argument("-strang", default="", type=str, help="strang")
-    parser_re_wt.add_argument("-begin", default=1000, type=int, help="begin")
-    parser_re_wt.add_argument("-kpt", default=1, type=int, help="kpt")
-    parser_re_wt.set_defaults(func=PostProcess().re_wt_call)
+        args = parser.parse_args()
+        args.func(args)
 
-    args = parser.parse_args()
-    args.func(args)
+    else:
+        print("Usage: postDMFT.py -h")

@@ -1,0 +1,23 @@
+name: dmft
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - setuptools
+  - numpy
+  - scipy
+  - numba
+  - pybind11
+  - mpi4py
+  - git
+  - gfortran_osx-64
+  - mpich
+  - mpi
+  - libblas
+  - liblapack
+  - gsl
+  - fftw
+  - matplotlib
+  - pip:
+      - requests

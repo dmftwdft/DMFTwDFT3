@@ -97,7 +97,8 @@ contains
         call zcopy(num_wann**2,Hk,1,Hk_loc,1)
         do i=1,n_atoms
           do j=1,n_orbs
-            if (sym_idx(ispin,i,j)>0) Hk_loc((i-1)*n_orbs+j,(i-1)*n_orbs+j)=Hk_loc((i-1)*n_orbs+j,(i-1)*n_orbs+j)+Sigoo(sym_idx(ispin,i,j))
+            if (sym_idx(ispin,i,j)>0) Hk_loc((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                Hk_loc((i-1)*n_orbs+j,(i-1)*n_orbs+j)+Sigoo(sym_idx(ispin,i,j))
           enddo
         enddo
         !do i=1,num_wann
@@ -117,7 +118,8 @@ contains
           call zcopy(num_wann**2,Hk,1,Hk_loc,1)
           do i=1,n_atoms
             do j=1,n_orbs
-              if (sym_idx(ispin,i,j)>0) Hk_loc((i-1)*n_orbs+j,(i-1)*n_orbs+j)=Hk_loc((i-1)*n_orbs+j,(i-1)*n_orbs+j)+Sigma(sym_idx(ispin,i,j),im)
+              if (sym_idx(ispin,i,j)>0) Hk_loc((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                  Hk_loc((i-1)*n_orbs+j,(i-1)*n_orbs+j)+Sigma(sym_idx(ispin,i,j),im)
             enddo
           enddo
           !do j=1,num_wann
@@ -217,7 +219,7 @@ contains
         !STOP
       enddo
       call comms_allreduce(tot_n,1,'SUM')
-      !if (on_root) write(*,*) mu, tot_n, n_elec
+!      if (on_root) write(*,*) mu, tot_n, n_elec
       if (abs(tot_n-n_elec)<1E-10) EXIT
       if (tot_n<n_elec) then
         if (HIGHB.eqv..FALSE.) then
@@ -253,7 +255,8 @@ contains
     use utility
     use generate_kpts, only: kpts, weight, num_new_kpts
     use generate_ham, only: tran
-    use comms, only: on_root,comms_allreduce,my_node_id, num_nodes, comms_array_split,comms_reduce, comms_barrier
+    use comms, only: on_root,comms_allreduce,my_node_id, num_nodes, &
+        comms_array_split,comms_reduce, comms_barrier
    
     implicit none
 
@@ -325,7 +328,8 @@ contains
           enddo
           do i=1,n_atoms
             do j=1,n_orbs
-              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)=evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigma(sym_idx(ispin,i,j),im)
+              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                  evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigma(sym_idx(ispin,i,j),im)
             enddo
           enddo
           !do j=1,num_wann
@@ -362,7 +366,8 @@ contains
         do i=1,n_atoms
           do j=1,n_orbs
             if (sym_idx(ispin,i,j)>0) then
-              sym_Gloc(sym_idx(ispin,i,j),:)=sym_Gloc(sym_idx(ispin,i,j),:)+Gloc((i-1)*n_orbs+j,:,ispin)
+              sym_Gloc(sym_idx(ispin,i,j),:)=sym_Gloc(sym_idx(ispin,i,j),:)+ &
+                  Gloc((i-1)*n_orbs+j,:,ispin)
               mul_fac(sym_idx(ispin,i,j))=mul_fac(sym_idx(ispin,i,j))+1.0_dp
             endif
           enddo
@@ -382,12 +387,14 @@ contains
       mul_fac=0.0_dp
       !write(*,*) Ed
       !do ib=1,num_wann
-      do i=1,n_atoms
-        do j=1,n_orbs
-          if (sym_idx(1,i,j)>0) then
-            sym_Ed(sym_idx(1,i,j))=sym_Ed(sym_idx(1,i,j))+Ed((i-1)*n_orbs+j)!real(HamR((nR+1)/2,ib,ib))
-            mul_fac(sym_idx(1,i,j))=mul_fac(sym_idx(1,i,j))+1.0_dp
-          endif
+      do ispin=1,nspin
+        do i=1,n_atoms
+          do j=1,n_orbs
+            if (sym_idx(ispin,i,j)>0) then
+              sym_Ed(sym_idx(ispin,i,j))=sym_Ed(sym_idx(ispin,i,j))+Ed((i-1)*n_orbs+j)!real(HamR((nR+1)/2,ib,ib))
+              mul_fac(sym_idx(ispin,i,j))=mul_fac(sym_idx(ispin,i,j))+1.0_dp
+            endif
+          enddo
         enddo
       enddo
       do ib=1,ncor_orb
@@ -428,7 +435,8 @@ contains
     use utility
     use generate_kpts, only: kpts, weight, num_new_kpts
     use generate_ham, only: tran
-    use comms, only: on_root,comms_allreduce,my_node_id, num_nodes, comms_array_split,comms_reduce, comms_barrier
+    use comms, only: on_root,comms_allreduce,my_node_id, num_nodes, comms_array_split, &
+        comms_reduce, comms_barrier
    
     implicit none
 
@@ -493,7 +501,7 @@ contains
       allocate (Hk(num_wann,num_wann), stat=ierr)
       if (ierr /= 0) call io_error('Error allocating Hk in compute_G_loc')
     endif
-    if ((.not. allocated(dHk)).and. (lforce.eq..true.)) then
+    if ((.not. allocated(dHk)).and. (lforce.eqv..true.)) then
       allocate (dHk(num_wann,num_wann), stat=ierr)
       if (ierr /= 0) call io_error('Error allocating dHk in compute_G_loc')
     endif
@@ -526,12 +534,12 @@ contains
     do ik=displs(my_node_id)+1,displs(my_node_id)+numk_loc
       loc_i=loc_i+1
       Hk=cmplx_0
-      if (lforce.eq..true.) dHk=cmplx_0
+      if (lforce.eqv..true.) dHk=cmplx_0
       !write(*,*) kpts(1,1),tran(1,1),HamR(1,1,1)
       do r=1,nR
         rdotk=twopi*dot_product(kpts(:,ik),dfloat(tran(:,r)))
         Hk(:,:)=Hk(:,:)+HamR(r,:,:)*exp(cmplx_i*rdotk)
-        if (lforce.eq..true.) dHk(:,:)=dHk(:,:)+dHamR(r,:,:)*exp(cmplx_i*rdotk)
+        if (lforce.eqv..true.) dHk(:,:)=dHk(:,:)+dHamR(r,:,:)*exp(cmplx_i*rdotk)
       enddo
       do ib=1,num_wann
         Ed(ib)=Ed(ib)+Hk(ib,ib)*weight(ik)*nspin
@@ -544,7 +552,8 @@ contains
         Gloc_sum=cmplx_0
         do i=1,n_atoms
           do j=1,n_orbs
-            if (sym_idx(ispin,i,j)>0) evec0((i-1)*n_orbs+j,(i-1)*n_orbs+j)=evec0((i-1)*n_orbs+j,(i-1)*n_orbs+j)+Sigoo(sym_idx(ispin,i,j))
+            if (sym_idx(ispin,i,j)>0) evec0((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                evec0((i-1)*n_orbs+j,(i-1)*n_orbs+j)+Sigoo(sym_idx(ispin,i,j))
           enddo
         enddo
         !do i=1,num_wann
@@ -562,7 +571,8 @@ contains
           enddo
           do i=1,n_atoms
             do j=1,n_orbs
-              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)=evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigma(sym_idx(ispin,i,j),im)
+              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                  evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigma(sym_idx(ispin,i,j),im)
             enddo
           enddo
           !do j=1,num_wann
@@ -604,7 +614,8 @@ contains
           enddo
           do i=1,n_atoms
             do j=1,n_orbs
-              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)=evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigoo(sym_idx(ispin,i,j))
+              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                  evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigoo(sym_idx(ispin,i,j))
             enddo
           enddo
          ! do j=1,num_wann
@@ -641,13 +652,14 @@ contains
           if (ispin.eq.2) mom(i)=mom(i)-real(Gloc_sum(i,i))*2
           do j=1,num_wann
             Ekin=Ekin+real(Hk(i,j)*Gloc_sum(j,i))*2
-            if (lforce.eq..true.) dEkin=dEkin+real(dHk(i,j)*Gloc_sum(j,i))*2
+            if (lforce.eqv..true.) dEkin=dEkin+real(dHk(i,j)*Gloc_sum(j,i))*2
           enddo
         enddo
 
 
       enddo
     enddo
+!    write(*,*) lforce, dEkin
     if (allocated(HamR)) deallocate (HamR,stat=ierr)
     if (allocated(dHamR)) deallocate (dHamR,stat=ierr)
     if (allocated(Hk)) deallocate (Hk,stat=ierr)
@@ -667,7 +679,7 @@ contains
     do i=1,num_wann
       tot_n=tot_n+dm(i)
     enddo
-    call comms_barrier
+!    call comms_barrier
 
     !if (on_root) write(*,*) tot_n,Gloc(1,1,1), Ekin, Ed, dm, mom
 
@@ -705,12 +717,14 @@ contains
       mul_fac=0.0_dp
       !write(*,*) Ed
       !do ib=1,num_wann
-      do i=1,n_atoms
-        do j=1,n_orbs
-          if (sym_idx(1,i,j)>0) then
-            sym_Ed(sym_idx(1,i,j))=sym_Ed(sym_idx(1,i,j))+Ed((i-1)*n_orbs+j)!real(HamR((nR+1)/2,ib,ib))
-            mul_fac(sym_idx(1,i,j))=mul_fac(sym_idx(1,i,j))+1.0_dp
-          endif
+      do ispin=1,nspin
+        do i=1,n_atoms
+          do j=1,n_orbs
+            if (sym_idx(ispin,i,j)>0) then
+              sym_Ed(sym_idx(ispin,i,j))=sym_Ed(sym_idx(ispin,i,j))+Ed((i-1)*n_orbs+j)!real(HamR((nR+1)/2,ib,ib))
+              mul_fac(sym_idx(ispin,i,j))=mul_fac(sym_idx(ispin,i,j))+1.0_dp
+            endif
+          enddo
         enddo
       enddo
       do ib=1,ncor_orb
@@ -790,7 +804,8 @@ contains
     use utility
     use generate_kpts
     use generate_ham, only: tran
-    use comms, only: on_root,comms_allreduce,my_node_id, num_nodes, comms_array_split,comms_reduce, comms_barrier
+    use comms, only: on_root,comms_allreduce,my_node_id, num_nodes, &
+        comms_array_split,comms_reduce, comms_barrier
    
     implicit none
 
@@ -862,7 +877,8 @@ contains
         !evec0=Hk*1.0_dp
         do i=1,n_atoms
           do j=1,n_orbs
-            if (sym_idx(ispin,i,j)>0) evec0((i-1)*n_orbs+j,(i-1)*n_orbs+j)=evec0((i-1)*n_orbs+j,(i-1)*n_orbs+j)+Sigoo(sym_idx(ispin,i,j))
+            if (sym_idx(ispin,i,j)>0) evec0((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                evec0((i-1)*n_orbs+j,(i-1)*n_orbs+j)+Sigoo(sym_idx(ispin,i,j))
           enddo
         enddo
         !do i=1,num_wann
@@ -880,7 +896,8 @@ contains
           enddo
           do i=1,n_atoms
             do j=1,n_orbs
-              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)=evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigma(sym_idx(ispin,i,j),im)
+              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                  evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigma(sym_idx(ispin,i,j),im)
             enddo
           enddo
           !do j=1,num_wann
@@ -897,7 +914,8 @@ contains
           enddo
           do i=1,n_atoms
             do j=1,n_orbs
-              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)=evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigoo(sym_idx(ispin,i,j))
+              if (sym_idx(ispin,i,j)>0) evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)= &
+                  evec((i-1)*n_orbs+j,(i-1)*n_orbs+j)-Sigoo(sym_idx(ispin,i,j))
             enddo
           enddo
           !do j=1,num_wann

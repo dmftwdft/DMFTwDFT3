@@ -1,252 +1,219 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # @Copyright 2007 Kristjan Haule
+# DMFTwDFT gratefully acknowledges Prof. Kristjan Haule for the courtesy of
+# making the original atom_d implementation available.
 #
-pycxx_available=True
-symeig_available=False
-
 from scipy import *
-import sys, re, os
+from numpy import *
+import sys, re, os, time
 import copy
 import getopt
 import pickle
 import glob
-import weave
-#import scipy.weave as weave
+import math
 from numpy import linalg
-
-
-#ROOT = os.environ.get('WIEN_DMFT_ROOT')
-#if ROOT is not None:
-#    sys.path.append( ROOT )
-#else:
-#    print >> sys.stderr, "Environment variable WIEN_DMFT_ROOT must be set!"
-#    print "Environment variable WIEN_DMFT_ROOT must be set!"
-#    sys.exit(1)
-
+from cubic_harmonics import Spheric2Cubic
+import dpybind
 import gaunt
-if pycxx_available: import gutils
-if symeig_available: import symeig
+import builtins
 
 
-import numpy
-nv = map(int,numpy.__version__.split('.'))
-if (nv[0],nv[1]) < (1,6):
-    loadtxt = io.read_array
-    savetxt = io.write_array
-
-
-def union(data1, data2):
-    " Takes a union of two lists"
-    res = data1
-    for d in data2:
-        if d not in res: res.append(d)
-    return res
-def overlap(data1, data2):
-    " Checks if there is any overlap between data1 and data2"
-    for d in data2:
-        if d in data1:
-            return True
-    return False
-
-def compres(groups):
+def compress(_groups_):
+    """We are given a two dimensional list of numbers which stands for indices of groups of rows or columns of a matrix.
+    We need to return similar list of groups, but simplified, which enumerate all coupled rows and columns of a matrix.
+    For example, if we have incoming groups:
+        [[0,1,2],[3,4],[0,5]]
+    we want to return
+        [[0,1,2,5],[3,4]]
+    """
+    # print('in  groups=', _groups_)
+    groups = [
+        set(g) for g in _groups_
+    ]  # these groups can be sets, which have optimized routines for checking overlaps.
     loopsDone = True
-    while (loopsDone):
+    while loopsDone:
         loopsDone = False
         for i in range(len(groups)):
-            if loopsDone: break
-            for j in range(i+1,len(groups)):
-                if loopsDone: break
-                if overlap(groups[i],groups[j]):
-                    groups[i] = union(groups[i],groups[j])
-                    del groups[j]
-                    loopsDone = True
-    for g in groups: g.sort()
-    groups.sort(cmp=lambda x,y: x[0]-y[0])
+            if loopsDone:
+                break
+            for j in range(i + 1, len(groups)):
+                if loopsDone:
+                    break
+                if not groups[i].isdisjoint(
+                    groups[j]
+                ):  # checking of groups[i] and groups[j] have any overlap
+                    groups[i] = groups[i].union(
+                        groups[j]
+                    )  # if yes, we take the union of the two
+                    del groups[
+                        j
+                    ]  # an delete the second group, because we have combined group now.
+                    loopsDone = True  # we can than jump out
+    groups = [
+        sorted(list(g)) for g in groups
+    ]  # at the end we sort each group for convenience
+    groups.sort(key=lambda x: x[0])  # and than we also sort groups by the first element
+    # print('out groups=', groups)                          # so that the output is unique
     return groups
 
-if pycxx_available:
-    compress = gutils.compres
-else:
-    compress = compres
+
+def analizeGroups(A, small=1e-4):
+    """Given matrix A, it finds which columns and rows are coupled by nonzero matrix elements of A.
+    grp0 contains indices to columns which are coupled
+    grp1 contains indices to rows which are coupled
+    """
+    nonzeros = where(
+        abs(A[:, :]) > small
+    )  # gives indices to rows&columns to all nonzero values of A.
+    grp0 = []
+    for i in range(shape(A)[0]):
+        u = nonzeros[1][nonzeros[0] == i]  # which columns are coupled through row i
+        if len(u):
+            grp0.append(set(u))  # these columns are coupled through one of the rows
+    grp1 = []
+    for j in range(shape(A)[1]):
+        u = nonzeros[0][nonzeros[1] == j]  # which rows are coupled through column j
+        if len(u):
+            grp1.append(set(u))  # these rows are coupled through one of the columns
+
+    grp0 = compress(
+        grp0
+    )  # simplifying groups so that all columns which are coupled by matrix A are in the same group.
+    grp1 = compress(
+        grp1
+    )  # simplifying groups so that all rows which are coupled by matrix A are in the same group.
+    return (grp1, grp0)
+
+
+def coupled(A, groups0, groups1, small=1e-4):
+    """given two sets of indeces of a matrix, determines
+    which groups are coupled due to nonzero matrix elements in A
+    If a group from groups0 is connected with a group from groups1,
+    fpair gives index of the group in groups1, i.e.,
+    return : fpair[<a group from groups0>] = <index of a group from groups1>
+    A slower but more readable version of the code is:
+
+       fpair = -ones(len(groups0),dtype=int)
+       for i,ig0 in enumerate(groups0):
+           for j,ig1 in enumerate(groups1):
+               if any(abs(A[ig0,:][:,ig1])>small):
+                   fpair[i]=j
+    """
+    fpair = [-1] * len(
+        groups0
+    )  # -1 means group from groups0 is disjoint with all groups in group1
+    for ii, ig0 in enumerate(groups0):
+        # fancy indexing A[ig0,:] returns 2D array with a selected set of of rows of matrix A.
+        # We checked if any row from a group ig0 has nonzero value, and if yes, with which column.
+        # We want to know which columns of matrix A are coupled with one of the rows in ig0.
+        # The non-zero columns are stored in nonz. Note that numpy function where
+        # returns two arrays, index in ig0, and index in second dimension. We only need the latter.
+        nonz = set(where(abs(A[ig0, :]) > small)[1])
+        # Now we replace rows in nonz with groups in groups1, and fpair will contain index of the
+        # group in groups1 which has overlap with row A.
+        for jj, jg1 in enumerate(groups1):
+            if not nonz.isdisjoint(jg1):
+                fpair[ii] = jj
+
+    return fpair
+
 
 def cprint2(fh, U):
     for i in range(shape(U)[0]):
         for j in range(shape(U)[1]):
-            f = U[i,j]
-            if abs(f)<1e-10: f = 0j
-            print >> fh, "%12.8f %12.8f*i " % (f.real, f.imag),
-        print >> fh
-    print >> fh
+            f = U[i, j]
+            if abs(f) < 1e-10:
+                f = 0j
+            print("%12.8f %12.8f*i " % (f.real, f.imag), end=" ", file=fh)
+        print(file=fh)
+    print(file=fh)
+
+
 def cprint(fh, U):
     for i in range(shape(U)[0]):
         for j in range(shape(U)[1]):
-            f = U[i,j]
-            if abs(f)<1e-10: f = 0j
-            print >> fh, "%7.4f %7.4f*i " % (f.real, f.imag),
-        print >> fh
-    print >> fh
+            f = U[i, j]
+            if abs(f) < 1e-10:
+                f = 0j
+            print("%7.4f %7.4f*i " % (f.real, f.imag), end=" ", file=fh)
+        print(file=fh)
+    print(file=fh)
+
 
 def mprint(fh, U):
     for i in range(shape(U)[0]):
         for j in range(shape(U)[1]):
-            f = U[i,j]
-            if abs(f)<1e-10: f = 0
-            print >> fh, "%7.4f " % f,
-        print >> fh
-    print >> fh
+            f = U[i, j]
+            if abs(f) < 1e-10:
+                f = 0
+            if isinstance(f, complex):
+                if abs(f.imag) > 1e-10:
+                    print("%7.4f+%7.4f%s" % (f.real, f.imag, "i"), end=" ", file=fh)
+                else:
+                    print("%7.4f " % f.real, end=" ", file=fh)
+            else:
+                print("%7.4f " % f, end=" ", file=fh)
+        print(file=fh)
+    print(file=fh)
 
 
-def TS2C_p():
-    s2 = 1./sqrt(2.)
-    T2 = [[],[],[]]
-    ##   m        x      y       z
-    T2[-1+1]= [    s2, -1j*s2,     0.0]
-    T2[ 0+1]= [   0.0,    0.0,     1.0]
-    T2[ 1+1]= [    s2,  1j*s2,     0.0]
-    return array(T2)
-
-def TS2C_d():
-  """ Generates transformation matrix from complex
-  spherical harmonic to cubic harmonic for l=2.
-
-  A^{cub} = T^+ * A^{spher} * T
-
-  Complex spherical harmonics are (after Varshalovich)
-
-  order of cubics = [yz, zx, xy, x^2-y^2, 3z^2-r^2]
-
- Spheric harmonics are:
-
-  Y   (r)=a/sqrt(2)*(x^2-y^2-2ixy)/r^2      Y   (r)=a/sqrt(2)*(2zx-2izy)/r^2
-   2-2                                       2-1
-
-  Y   (r)=a/sqrt(6)*(3z^2/r^2-1)
-   2 0
-
-  Y   (r)=-a/sqrt(2)*(2zx+2izy)/r^2          Y   (r)=a/sqrt(2)*(x^2-y^2+2ixy)/r^2
-   2 1                                        2 2
-
-  Cubic harmonics are compatible with Wien2K code:
-
-  Y   (r)= a*(3z^2/r^2-1)/sqrt(6)
-   2 1
-
-  Y   (r)= a*(x^2-y^2)/r^2
-   2 2
-
-  Y   (r)= 2*a*yz/r^2
-   2 3
-
-  Y   (r)= 2*a*zx/r^2
-   2 4
-
-  Y   (r)= a*2xy/r^2
-   2 5
-
-  where a=sqrt(3*5/pi)/4 is a normalization constant.
-
-  Transformation matrix T(mu,i) is given by
-       _   --
-  Y   (r)= >   T(m,i)*Y  (r)
-   2m      --          2i
-          i=xyz
-  """
-  s2 = 1./sqrt(2.)
-  T2 = [[],[],[],[],[]]
-  ##   m       z^2 x^2-y^2     yz    zx       xy
-  T2[-2+2]= [  0.0,    s2,    0.0,  0.0,  -1j*s2]
-  T2[-1+2]= [  0.0,   0.0, -1j*s2,   s2,     0.0]
-  T2[ 0+2]= [  1.0,   0.0,    0.0,  0.0,     0.0]
-  T2[ 1+2]= [  0.0,   0.0, -1j*s2,  -s2,     0.0]
-  T2[ 2+2]= [  0.0,    s2,    0.0,  0.0,   1j*s2]
-  return array(T2)
-
-def TS2C(l):
-    if l==0: return array([[1]])
-    if l==1: return TS2C_p()
-    if l==2: return TS2C_d()
-    #if l==3: return Ts2C_f()
-
-
-def CoulUs(T2C, l):
+def CoulUsC2_slow(l, T2C):
     # Precomputes gaunt coefficients for speed
     # shape(gck)=(4,7,7,4). It contains gck(l, m4, m1, k)
     gck = gaunt.cmp_all_gaunt()
-    nw = 2*l+1
+    # save('gck.npy', gck)
+    # save('T2C.npy', T2C)
+    # print 'Gaunt coefficients precomputed - shape(gck)', shape(gck)
+    Nls = int(2 * l + 1)
+    if len(T2C) == Nls:
+        nw = Nls
+        ns = 1
+    elif len(T2C) == 2 * Nls:
+        nw = int(2 * (2 * l + 1))
+        ns = 2
+    else:
+        print("ERROR in atom_d.py: T2C has wrong shape")
+        sys.exit(0)
+
     T2Cp = conj(T2C.transpose())
 
-    UC = zeros((l+1, nw, nw, nw, nw), dtype=complex)
-    shft = 3-l
-    for i4 in range(nw):
+    UC = zeros((l + 1, nw, nw, nw, nw), dtype=complex)
+    shft = 3 - l
+    shft2 = int(2 * l + 1)
+    Sum1 = zeros((nw, nw, shft2 * 2), dtype=complex)
+    Sum2 = zeros((nw, nw, shft2 * 2), dtype=complex)
+
+    for k in range(l + 1):
+        Sum1[:, :, :] = 0
+        for i4 in range(nw):
+            for i1 in range(nw):
+                for m4 in range(Nls):
+                    for m1 in range(Nls):
+                        for s in range(ns):
+                            Sum1[i4, i1, m1 - m4 + shft2] += (
+                                T2Cp[i4, m4 + s * Nls]
+                                * gck[l, shft + m4, shft + m1, k]
+                                * T2C[m1 + s * Nls, i1]
+                            )
+        Sum2[:, :, :] = 0
         for i3 in range(nw):
             for i2 in range(nw):
-                for i1 in range(nw):
-                    for k in range(l+1):
-                        dsum = 0
-                        for m4 in range(nw):
-                            for m3 in range(nw):
-                                for m2 in range(nw):
-                                    for m1 in range(nw):
-                                        if (m1+m2!=m3+m4): continue
-                                        dsum += T2Cp[i4,m4] * gck[l,shft+m4,shft+m1,k] * T2C[m1,i1] * T2Cp[i3,m3] * gck[l,shft+m2,shft+m3,k] * T2C[m2,i2]
-                        UC[k,i4,i3,i2,i1] = dsum
-
-    # 3-l,3+l
-    # 3-l,
-    #print
-    #for i4 in range(nw):
-    #    for i1 in range(nw):
-    #        for i3 in range(nw):
-    #            for i2 in range(nw):
-    #                f = UC[2,i4,i3,i2,i1]
-    #                print "%6.3f " % f.real,
-    #            print
-    #        print
-    #    print
-
-    return UC
-
-def CoulUsC1(l, T2C):
-    # Precomputes gaunt coefficients for speed
-    # shape(gck)=(4,7,7,4). It contains gck(l, m4, m1, k)
-    gck = gaunt.cmp_all_gaunt()
-
-    #print 'Gaunt coefficients precomputed - shape(gck)', shape(gck)
-    nw = 2*l+1
-    T2Cp = conj(T2C.transpose())
-
-    UC = zeros((l+1, nw, nw, nw, nw), dtype=complex)
-    shft = 3-l
-
-    source="""
-    using namespace std;
-    for (int i4=0; i4<nw; i4++){
-        for (int i3=0; i3<nw; i3++){
-            for (int i2=0; i2<nw; i2++){
-                for (int i1=0; i1<nw; i1++){
-                    for (int k=0; k<l+1; k++){
-                        complex<double> dsum = 0;
-                        for (int m4=0; m4<nw; m4++){
-                            for (int m3=0; m3<nw; m3++){
-                                for (int m2=0; m2<nw; m2++){
-                                    for (int m1=0; m1<nw; m1++){
-                                        if (m1+m2!=m3+m4) continue;
-                                        dsum += T2Cp(i4,m4)*gck(l,shft+m4,shft+m1,k)*T2C(m1,i1) * T2Cp(i3,m3)*gck(l,shft+m2,shft+m3,k)*T2C(m2,i2);
-                                    }
-                                }
-                            }
-                        }
-                        UC(k,i4,i3,i2,i1) = dsum;
-                    }
-                }
-            }
-        }
-    }
-    """
-
-    weave.inline(source, ['UC', 'gck', 'l', 'T2C', 'T2Cp', 'shft', 'nw'],
-                 type_converters=weave.converters.blitz, compiler = 'gcc')
-
+                for m3 in range(Nls):
+                    for m2 in range(Nls):
+                        for s in range(ns):
+                            Sum2[i3, i2, m3 - m2 + shft2] += (
+                                T2Cp[i3, m3 + s * Nls]
+                                * gck[l, shft + m2, shft + m3, k]
+                                * T2C[m2 + s * Nls, i2]
+                            )
+        for i4 in range(nw):
+            for i3 in range(nw):
+                for i2 in range(nw):
+                    for i1 in range(nw):
+                        csum = 0
+                        for dm in range(shft2 * 2):
+                            csum += Sum1[i4, i1, dm] * Sum2[i3, i2, dm]
+                        UC[k, i4, i3, i2, i1] = csum
     return UC
 
 
@@ -254,186 +221,60 @@ def CoulUsC2(l, T2C):
     # Precomputes gaunt coefficients for speed
     # shape(gck)=(4,7,7,4). It contains gck(l, m4, m1, k)
     gck = gaunt.cmp_all_gaunt()
-
-    #print 'Gaunt coefficients precomputed - shape(gck)', shape(gck)
-    mw = 2*l+1
-    if len(T2C) == mw:
-        nw = mw
-        ns = 1
-    elif len(T2C) == 2*mw:
-        nw = 2*(2*l+1)
-        ns = 2
-    else:
-        print "ERROR in atom_d.py: T2C has wrong shape"
-        sys.exit(0)
-
-    T2Cp = conj(T2C.transpose())
-
-    UC = zeros((l+1, nw, nw, nw, nw), dtype=complex)
-    shft = 3-l
-    shft2 = 2*l+1
-    Sum1 = zeros((nw,nw,shft2*2),dtype=complex)
-    Sum2 = zeros((nw,nw,shft2*2),dtype=complex)
-
-    source="""
-    using namespace std;;
-    for (int k=0; k<l+1; k++){
-        Sum1=0;
-        for (int i4=0; i4<nw; i4++){
-            for (int i1=0; i1<nw; i1++){
-                for (int m4=0; m4<mw; m4++){
-                    for (int m1=0; m1<mw; m1++){
-                        for (int s=0; s<ns; s++) Sum1(i4,i1,m1-m4+shft2) += T2Cp(i4,m4+s*mw)*gck(l,shft+m4,shft+m1,k)*T2C(m1+s*mw,i1);
-                    }
-                }
-            }
-        }
-        Sum2=0;
-        for (int i3=0; i3<nw; i3++){
-            for (int i2=0; i2<nw; i2++){
-                for (int m3=0; m3<mw; m3++){
-                    for (int m2=0; m2<mw; m2++){
-                        for (int s=0; s<ns; s++) Sum2(i3,i2,m3-m2+shft2) += T2Cp(i3,m3+s*mw)*gck(l,shft+m2,shft+m3,k)*T2C(m2+s*mw,i2);
-                    }
-                }
-            }
-        }
-        for (int i4=0; i4<nw; i4++){
-            for (int i3=0; i3<nw; i3++){
-                for (int i2=0; i2<nw; i2++){
-                    for (int i1=0; i1<nw; i1++){
-                        complex<double> csum=0.0;
-                        for (int dm=0; dm<shft2*2; dm++) csum += Sum1(i4,i1,dm)*Sum2(i3,i2,dm);
-                        UC(k,i4,i3,i2,i1) = csum;
-                    }
-                }
-            }
-        }
-    }
-    """
-
-    weave.inline(source, ['UC', 'gck', 'l', 'T2C', 'T2Cp', 'shft', 'nw', 'mw', 'ns', 'shft2', 'Sum1', 'Sum2'],
-                 type_converters=weave.converters.blitz, compiler = 'gcc')
-
+    gck = array(
+        gck, order="C"
+    )  # This is essential for pybind11 code to work with fortran gck
+    T2C = array(T2C, order="C")
+    nw = len(T2C)
+    UC = zeros((int(l + 1), nw, nw, nw, nw), dtype=complex)
+    if l % 1 == 0:
+        dpybind.FromSlaterToMatrixU(UC, gck, l, T2C)
+    else:  # half-integer l
+        dpybind.FromSlaterToMatrixUd(UC, gck, l, T2C)
     return UC
-
-def CoulUsC(l, T2C, op):
-    # Precomputes gaunt coefficients for speed
-    # shape(gck)=(4,7,7,4). It contains gck(l, m4, m1, k)
-    gck = gaunt.cmp_all_gaunt()
-
-    #print 'shape(gck)=', shape(gck)
-    #print 'Gaunt precomputed'
-
-    nw = 2*l+1
-    # creating large T2C base
-    if ( len(T2C) < 2*nw ):
-        if (len(T2C)!=nw): print 'ERROR: Something wrong with size of T2C'
-        T2Cl = zeros((2*nw,2*nw),dtype=complex)
-        T2Cl[:nw,:nw] = T2C
-        T2Cl[nw:,nw:] = T2C
-    else:
-        T2Cl = T2C
-
-    T2Cp = conj(T2Cl.transpose())
-
-    UC = zeros((l+1, 2*nw, 2*nw, 2*nw, 2*nw), dtype=complex)
-    shft = 3-l
-
-    bi = array(op.bi)
-    sz = array(op.sz)
-    #print 'bi=', bi
-    #print 'sz=', sz
-    #print 'nw=', nw
-
-    source="""
-    using namespace std;
-    for (int i4=0; i4<2*nw; i4++){
-        for (int i3=0; i3<2*nw; i3++){
-            for (int i2=0; i2<2*nw; i2++){
-                for (int i1=0; i1<2*nw; i1++){
-                    for (int k=0; k<l+1; k++){
-                        complex<double> dsum = 0;
-                        for (int ms4=0; ms4<2*nw; ms4++){
-                            int m4 = bi(ms4);
-                            int s4 = sz(ms4);
-                            //cout<<"ms4="<<ms4<<" "<<m4<<" "<<s4<<endl;
-                            for (int ms3=0; ms3<2*nw; ms3++){
-                                int m3 = bi(ms3);
-                                int s3 = sz(ms3);
-                                //cout<<"ms3="<<ms3<<" "<<m3<<" "<<s3<<endl;
-                                for (int ms2=0; ms2<2*nw; ms2++){
-                                    int m2 = bi(ms2);
-                                    int s2 = sz(ms2);
-                                    //cout<<"ms2="<<ms2<<" "<<m2<<" "<<s2<<endl;
-                                    for (int ms1=0; ms1<2*nw; ms1++){
-                                        int m1 = bi(ms1);
-                                        int s1 = sz(ms1);
-                                        //cout<<"ms1="<<ms1<<" "<<m1<<" "<<s1<<endl;
-                                        if (m1+m2!=m3+m4) continue;
-                                        if (s1!=s4 || s2!=s3) continue;
-                                        dsum += T2Cp(i4,ms4)*gck(l,shft+m4,shft+m1,k)*T2C(ms1,i1) * T2Cp(i3,ms3)*gck(l,shft+m2,shft+m3,k)*T2C(ms2,i2);
-                                    }
-                                }
-                            }
-                        }
-                        UC(k,i4,i3,i2,i1) = dsum;
-                    }
-                }
-            }
-        }
-    }
-    """
-
-
-
-    weave.inline(source, ['UC', 'gck', 'l', 'T2C', 'T2Cp', 'shft', 'nw', 'bi', 'sz'],
-                 type_converters=weave.converters.blitz, compiler = 'gcc')
-
-    return UC
-
 
 
 class operateLS(object):
-    def __init__ (self, baths, T2C, Q3d):
+    def __init__(self, baths, T2C, Q3d):
         self.baths = baths
-        self.Nband = self.baths/2
+        self.Nband = int(self.baths / 2)
         self.N = self.baths
 
-        self.mask=[]
-        for i in range(self.N): self.mask.append(1<<i);
+        self.mask = []
+        for i in range(self.N):
+            self.mask.append(1 << i)
 
         self.T2C = T2C
         self.Q3d = Q3d
 
         if not self.Q3d:
-        #############################################
-        # Here for 5d's where spin-orbit is kept    #
-        #############################################
-            self.Q3d=False
-            M2=[]
-            l=(self.Nband-1)/2
-            #print 'L is here ', l
-            for s in [0.5,-0.5]:
-                for m in range(-l,l+1):
-                    M2.append( (m+2*s)/2.)
-            #print 'M2=',M2
-            self.M2a=zeros((len(M2),len(M2)),dtype=float)
+            #############################################
+            # Here for 5d's where spin-orbit is kept    #
+            #############################################
+            self.Q3d = False
+            M2 = []
+            l = int((self.Nband - 1) / 2)
+            # print 'L is here ', l
+            for s in [0.5, -0.5]:
+                for m in range(-l, l + 1):
+                    M2.append((m + 2 * s) / 2.0)
+            # print 'M2=',M2
+            self.M2a = zeros((len(M2), len(M2)), dtype=float)
             for a in range(len(M2)):
                 for b in range(len(M2)):
                     for ms in range(len(M2)):
-                        self.M2a[a,b] += real(conj(T2C[ms,a])*T2C[ms,b]*M2[ms])
-            #print 'M2a=', self.M2a
+                        self.M2a[a, b] += real(conj(T2C[ms, a]) * T2C[ms, b] * M2[ms])
+            # print 'M2a=', self.M2a
         else:
-        ####################################################
-        # Here only for 3d's where spin-orbit is neglected #
-        ####################################################
-            self.Q3d=True
-            self.bi=[] # band index
-            self.sz=[] # sz
+            ####################################################
+            # Here only for 3d's where spin-orbit is neglected #
+            ####################################################
+            self.Q3d = True
+            self.bi = []  # band index
+            self.sz = []  # sz
             for i in range(self.Nband):
-                self.sz.append(1);
-                self.bi.append(i);
+                self.sz.append(1)
+                self.bi.append(i)
             for i in range(self.Nband):
                 self.bi.append(i)
                 self.sz.append(-1)
@@ -443,664 +284,668 @@ class operateLS(object):
             for i in range(self.Nband):
                 self.mask_u.append(self.mask[i])
             for i in range(self.Nband):
-                self.mask_d.append(self.mask[self.Nband+i])
+                self.mask_d.append(self.mask[self.Nband + i])
 
     def Nel(self, state):
-        n=0
+        n = 0
         for k in self.mask:
-            if (k&state): n+=1
+            if k & state:
+                n += 1
         return n
+
     def occup(self, state):
-        """ gives a list of occupancies per band [n_{band1},n_{band2},...]
-        """
-        oc=[]
+        """gives a list of occupancies per band [n_{band1},n_{band2},...]"""
+        oc = []
         for i in range(self.N):
-            if state & self.mask[i]: oc.append(1)
-            else: oc.append(0)
+            if state & self.mask[i]:
+                oc.append(1)
+            else:
+                oc.append(0)
         return oc
 
     def sign(self, state, mask_min, mask_max):
-        """ Sign when electron hops from mask_min to mask_max
+        """Sign when electron hops from mask_min to mask_max
         Counts number of electrons between the two spaces
         """
         # mask will run between mask_min to mask_max
-        mask = mask_min<<1
-        n=0           # number of electrons between mask_min and mask_max
-        while (mask<mask_max):    # loop to mask_max
-            if (mask&state): n+=1 # found electron between the two places
-            mask = mask<<1        # increment the mask
-        return 1-2*(n%2)          # (-1)^n
+        mask = mask_min << 1
+        n = 0  # number of electrons between mask_min and mask_max
+        while mask < mask_max:  # loop to mask_max
+            if mask & state:
+                n += 1  # found electron between the two places
+            mask = mask << 1  # increment the mask
+        return 1 - 2 * (n % 2)  # (-1)^n
 
     def sign_(self, state, mask_max):
-        """ Sign when electron is added to the state (from the left)
-        """
+        """Sign when electron is added to the state (from the left)"""
         # mask will run between mask_min to mask_max
         mask = 1
-        n=0           # number of electrons between mask_min and mask_max
-        while (mask<mask_max):    # loop to mask_max
-            if (mask&state): n+=1 # found electron between the two places
-            mask = mask<<1        # increment the mask
-        return 1-2*(n%2)          # (-1)^n
+        n = 0  # number of electrons between mask_min and mask_max
+        while mask < mask_max:  # loop to mask_max
+            if mask & state:
+                n += 1  # found electron between the two places
+            mask = mask << 1  # increment the mask
+        return 1 - 2 * (n % 2)  # (-1)^n
 
     def N_el_before(self, state, i):
-        n=0
+        n = 0
         for q in range(i):
-            if self.mask[q]&state: n+=1
+            if self.mask[q] & state:
+                n += 1
         return n
 
     def DM(self, state):
         "Density matrix"
         DenM = [[[] for i in range(self.N)] for j in range(self.N)]
         for j in range(self.N):
-            if not self.mask[j]&state: continue # c_j operator
+            if not self.mask[j] & state:
+                continue  # c_j operator
             jsig = self.sign_(state, self.mask[j])
-            nst = state^self.mask[j]
+            nst = state ^ self.mask[j]
             for i in range(self.N):
-                if self.mask[i]&nst: continue   # c_i^\dagger operator
-                nstate = nst^self.mask[i]
+                if self.mask[i] & nst:
+                    continue  # c_i^\dagger operator
+                nstate = nst ^ self.mask[i]
                 isig = self.sign_(nst, self.mask[i])
-                DenM[i][j].append( (nstate, jsig*isig) )
+                DenM[i][j].append((nstate, jsig * isig))
         return DenM
 
     def Fp(self, state, ib):
-        """ This implements psi^dagger_{ib} operator acting on state
+        """This implements psi^dagger_{ib} operator acting on state
         indexes are:
           ib - band+spin index
         """
-        if state&self.mask[ib]: return (0,1)  # This state is already occupied
-        newstate = state^self.mask[ib]
+        if state & self.mask[ib]:
+            return (0, 1)  # This state is already occupied
+        newstate = state ^ self.mask[ib]
         sig = self.sign_(state, self.mask[ib])
         return (newstate, sig)
 
-
     def CoulombU(self, state, UC, FkoJ, Ising=False):
-        sts=[]
-        ni=-1
-        maxk=l+1
-        if (self.Q3d):
+        sts = []
+        ni = -1
+        maxk = int(l + 1)
+        if self.Q3d:
             ### will evaluate  again <sts| U(b,a,j,i) psi^+_b psi^+_a psi_j psi_i | state>, but
             ### this time U is defined in (m4,m3,m2,m1) basis only, and is missing the spin component.
             ### Need to make sure that s_1==s_4 and s_2==s_3
             ### hence  <sts| U(m4,m3,m2,m1) psi^+_{m4,s} psi^+_{m3,s'} psi_{m2,s'} psi_{m1,s} | state>
             for i in range(self.N):
-                if not(self.mask[i]&state) : continue # (i,m1) does not exists
-                ni+=1
-                state1 = state^self.mask[i]
+                if not (self.mask[i] & state):
+                    continue  # (i,m1) does not exists
+                ni += 1
+                state1 = state ^ self.mask[i]
                 m1 = self.bi[i]
                 s1 = self.sz[i]
-                nj=-1
+                nj = -1
                 for j in range(self.N):
-                    if not(self.mask[j]&state1) : continue  # (j,m2) does not exists
-                    nj+=1
+                    if not (self.mask[j] & state1):
+                        continue  # (j,m2) does not exists
+                    nj += 1
                     # here we have: mask[i]&state && mask[j]&state
-                    state2 = state1^self.mask[j]
+                    state2 = state1 ^ self.mask[j]
                     m2 = self.bi[j]
                     s2 = self.sz[j]
-                    for a in range(self.N): # (a,m3) exists
-                        if self.mask[a]&state2: continue
-                        if self.sz[a]!=s2 : continue # s3 == s2
-                        na = self.N_el_before(state2,a)
-                        state3 = state2^self.mask[a]
+                    for a in range(self.N):  # (a,m3) exists
+                        if self.mask[a] & state2:
+                            continue
+                        if self.sz[a] != s2:
+                            continue  # s3 == s2
+                        na = self.N_el_before(state2, a)
+                        state3 = state2 ^ self.mask[a]
                         m3 = self.bi[a]
                         s3 = self.sz[a]
-                        for b in range(self.N): # (b,m4) exists
-                            if self.mask[b]&state3 : continue
-                            if self.sz[b]!=s1: continue # s4 == s1
-                            nb = self.N_el_before(state3,b)
-                            state4 = state3^self.mask[b]
+                        for b in range(self.N):  # (b,m4) exists
+                            if self.mask[b] & state3:
+                                continue
+                            if self.sz[b] != s1:
+                                continue  # s4 == s1
+                            nb = self.N_el_before(state3, b)
+                            state4 = state3 ^ self.mask[b]
                             m4 = self.bi[b]
                             s4 = self.sz[b]
 
-                            if Ising and state4!=state: continue
+                            if Ising and state4 != state:
+                                continue
 
-                            sign = 1-2*((ni+nj+na+nb)%2)
-                            U0 = sign*UC[0,m4,m3,m2,m1]*FkoJ[0]
+                            sign = 1 - 2 * ((ni + nj + na + nb) % 2)
+                            U0 = sign * UC[0, m4, m3, m2, m1] * FkoJ[0]
 
-                            dsum=0
-                            for k in range(1,maxk):
-                                dsum += UC[k,m4,m3,m2,m1]*FkoJ[k]
-                            U1 = sign*dsum
+                            dsum = 0
+                            for k in range(1, maxk):
+                                dsum += UC[k, m4, m3, m2, m1] * FkoJ[k]
+                            U1 = sign * dsum
 
-                            if (abs(U0)>1e-6 or abs(U1)>1e-6): sts.append([state4, [U0,U1]])
+                            if abs(U0) > 1e-6 or abs(U1) > 1e-6:
+                                sts.append([state4, [U0, U1]])
 
-                            #if (state==1023):
-                            #    print 'Last:', state4, i, j, a, b, U1
-
-        else :  # This is used for 5d, but not for 3d
+        else:  # This is used for 5d, but not for 3d
             ### will evaluate  <sts| U(b,a,j,i) psi^+_b psi^+_a psi_j psi_i | state>
             for i in range(self.N):
-                if not(self.mask[i]&state) : continue # i should exist, otherwise continue
-                ni+=1
-                state1 = state^self.mask[i]
-                nj=-1
+                if not (self.mask[i] & state):
+                    continue  # i should exist, otherwise continue
+                ni += 1
+                state1 = state ^ self.mask[i]
+                nj = -1
                 for j in range(self.N):
-                    if not(self.mask[j]&state1) : continue  # j should exist, otherwise continue
-                    nj+=1
+                    if not (self.mask[j] & state1):
+                        continue  # j should exist, otherwise continue
+                    nj += 1
                     # here we have: mask[i]&state && mask[j]&state
-                    state2 = state1^self.mask[j]
+                    state2 = state1 ^ self.mask[j]
                     for a in range(self.N):
-                        if self.mask[a]&state2: continue # a should not exist exist
-                        na = self.N_el_before(state2,a)
-                        state3 = state2^self.mask[a]
+                        if self.mask[a] & state2:
+                            continue  # a should not exist exist
+                        na = self.N_el_before(state2, a)
+                        state3 = state2 ^ self.mask[a]
                         for b in range(self.N):
-                            if self.mask[b]&state3: continue # b should not exist
-                            nb = self.N_el_before(state3,b)
-                            state4 = state3^self.mask[b]
+                            if self.mask[b] & state3:
+                                continue  # b should not exist
+                            nb = self.N_el_before(state3, b)
+                            state4 = state3 ^ self.mask[b]
 
-                            if Ising and state4!=state: continue
-                            sign = 1-2*((ni+nj+na+nb)%2)
-                            U0 = sign*UC[0,b,a,j,i]*FkoJ[0]
+                            if Ising and state4 != state:
+                                continue
+                            sign = 1 - 2 * ((ni + nj + na + nb) % 2)
+                            U0 = sign * UC[0, b, a, j, i] * FkoJ[0]
 
-                            dsum=0
-                            for k in range(1,maxk):
-                                dsum += UC[k,b,a,j,i]*FkoJ[k]
-                            U1 = sign*dsum
+                            dsum = 0
+                            for k in range(1, maxk):
+                                dsum += UC[k, b, a, j, i] * FkoJ[k]
+                            U1 = sign * dsum
 
-                            if (abs(U0)>1e-6 or abs(U1)>1e-6): sts.append([state4, [U0,U1]])
+                            if abs(U0) > 1e-6 or abs(U1) > 1e-6:
+                                sts.append([state4, [U0, U1]])
         return sts
+
     def CoulombUIsing(self, state, UC, FkoJ):
-        sts=[]
-        ni=-1
-        maxk=l+1
-        if (self.Q3d):
+        sts = []
+        ni = -1
+        maxk = l + 1
+        if self.Q3d:
             ### will evaluate  again <sts| U(b,a,j,i) psi^+_b psi^+_a psi_j psi_i | state>, but
             ### this time U is defined in (m4,m3,m2,m1) basis only, and is missing the spin component.
             ### Need to make sure that s_1==s_4 and s_2==s_3
             ### hence  <sts| U(m4,m3,m2,m1) psi^+_{m4,s} psi^+_{m3,s'} psi_{m2,s'} psi_{m1,s} | state>
             for i in range(self.N):
-                if not(self.mask[i]&state) : continue # (i,m1) does not exists
-                ni+=1
-                state1 = state^self.mask[i]
+                if not (self.mask[i] & state):
+                    continue  # (i,m1) does not exists
+                ni += 1
+                state1 = state ^ self.mask[i]
                 m1 = self.bi[i]
                 s1 = self.sz[i]
-                nj=-1
+                nj = -1
                 for j in range(self.N):
-                    if not(self.mask[j]&state1) : continue  # (j,m2) does not exists
-                    nj+=1
+                    if not (self.mask[j] & state1):
+                        continue  # (j,m2) does not exists
+                    nj += 1
                     # here we have: mask[i]&state && mask[j]&state
-                    state2 = state1^self.mask[j]
+                    state2 = state1 ^ self.mask[j]
                     m2 = self.bi[j]
                     s2 = self.sz[j]
-                    for a in [i,j]: # (a,m3) exists
-                        if self.mask[a]&state2: continue
-                        if self.sz[a]!=s2 : continue # s3 == s2
-                        na = self.N_el_before(state2,a)
-                        state3 = state2^self.mask[a]
+                    for a in [i, j]:  # (a,m3) exists
+                        if self.mask[a] & state2:
+                            continue
+                        if self.sz[a] != s2:
+                            continue  # s3 == s2
+                        na = self.N_el_before(state2, a)
+                        state3 = state2 ^ self.mask[a]
                         m3 = self.bi[a]
                         s3 = self.sz[a]
-                        for b in [i,j]: # (b,m4) exists
-                            if self.mask[b]&state3 : continue
-                            if self.sz[b]!=s1: continue # s4 == s1
-                            nb = self.N_el_before(state3,b)
-                            state4 = state3^self.mask[b]
+                        for b in [i, j]:  # (b,m4) exists
+                            if self.mask[b] & state3:
+                                continue
+                            if self.sz[b] != s1:
+                                continue  # s4 == s1
+                            nb = self.N_el_before(state3, b)
+                            state4 = state3 ^ self.mask[b]
                             m4 = self.bi[b]
                             s4 = self.sz[b]
 
-                            if state4!=state: continue
+                            if state4 != state:
+                                continue
 
-                            sign = 1-2*((ni+nj+na+nb)%2)
-                            U0 = sign*UC[0,m4,m3,m2,m1]*FkoJ[0]
+                            sign = 1 - 2 * ((ni + nj + na + nb) % 2)
+                            U0 = sign * UC[0, m4, m3, m2, m1] * FkoJ[0]
 
-                            dsum=0
-                            for k in range(1,maxk):
-                                dsum += UC[k,m4,m3,m2,m1]*FkoJ[k]
-                            U1 = sign*dsum
+                            dsum = 0
+                            for k in range(1, maxk):
+                                dsum += UC[k, m4, m3, m2, m1] * FkoJ[k]
+                            U1 = sign * dsum
 
-                            if (abs(U0)>1e-6 or abs(U1)>1e-6): sts.append([state4, [U0,U1]])
+                            if abs(U0) > 1e-6 or abs(U1) > 1e-6:
+                                sts.append([state4, [U0, U1]])
 
-                            #if (state==1023):
+                            # if (state==1023):
                             #    print 'Last:', state4, i, j, a, b, U1
 
-        else :  # This is used for 5d, but not for 3d
+        else:  # This is used for 5d, but not for 3d
             ### will evaluate  <sts| U(b,a,j,i) psi^+_b psi^+_a psi_j psi_i | state>
             for i in range(self.N):
-                if not(self.mask[i]&state) : continue # i should exist, otherwise continue
-                ni+=1
-                state1 = state^self.mask[i]
-                nj=-1
+                if not (self.mask[i] & state):
+                    continue  # i should exist, otherwise continue
+                ni += 1
+                state1 = state ^ self.mask[i]
+                nj = -1
                 for j in range(self.N):
-                    if not(self.mask[j]&state1) : continue  # j should exist, otherwise continue
-                    nj+=1
+                    if not (self.mask[j] & state1):
+                        continue  # j should exist, otherwise continue
+                    nj += 1
                     # here we have: mask[i]&state && mask[j]&state
-                    state2 = state1^self.mask[j]
-                    for a in [i,j]:
-                        if self.mask[a]&state2: continue # a should not exist exist
-                        na = self.N_el_before(state2,a)
-                        state3 = state2^self.mask[a]
-                        for b in [i,j]:
-                            if self.mask[b]&state3: continue # b should not exist
-                            nb = self.N_el_before(state3,b)
-                            state4 = state3^self.mask[b]
+                    state2 = state1 ^ self.mask[j]
+                    for a in [i, j]:
+                        if self.mask[a] & state2:
+                            continue  # a should not exist exist
+                        na = self.N_el_before(state2, a)
+                        state3 = state2 ^ self.mask[a]
+                        for b in [i, j]:
+                            if self.mask[b] & state3:
+                                continue  # b should not exist
+                            nb = self.N_el_before(state3, b)
+                            state4 = state3 ^ self.mask[b]
 
-                            if state4!=state: continue
+                            if state4 != state:
+                                continue
 
-                            sign = 1-2*((ni+nj+na+nb)%2)
-                            U0 = sign*UC[0,b,a,j,i]*FkoJ[0]
+                            sign = 1 - 2 * ((ni + nj + na + nb) % 2)
+                            U0 = sign * UC[0, b, a, j, i] * FkoJ[0]
 
-                            dsum=0
-                            for k in range(1,maxk):
-                                dsum += UC[k,b,a,j,i]*FkoJ[k]
-                            U1 = sign*dsum
-
-                            if (abs(U0)>1e-6 or abs(U1)>1e-6): sts.append([state4, [U0,U1]])
+                            dsum = 0
+                            for k in range(1, maxk):
+                                dsum += UC[k, b, a, j, i] * FkoJ[k]
+                            U1 = sign * dsum
+                            # print('state=', self.occup(state), 'state1=', self.occup(state1), 'state2=', self.occup(state2), 'state3=', self.occup(state3), 'U0=', U0, 'U1=', U1, )
+                            if abs(U0) > 1e-6 or abs(U1) > 1e-6:
+                                sts.append([state4, [U0, U1]])
         return sts
 
     def printn(self, state):
-        sstate=''
+        sstate = ""
         if self.Q3d:
             for i in range(self.Nband):
-                if (state & self.mask_u[i]) and (state & self.mask_d[i]) : sstate += '2'
-                elif (state & self.mask_u[i]) : sstate += 'u'
-                elif (state & self.mask_d[i]) : sstate += 'd'
-                else : sstate += '0'
+                if (state & self.mask_u[i]) and (state & self.mask_d[i]):
+                    sstate += "2"
+                elif state & self.mask_u[i]:
+                    sstate += "u"
+                elif state & self.mask_d[i]:
+                    sstate += "d"
+                else:
+                    sstate += "0"
         else:
             for i in range(self.N):
-                if state & self.mask[i]: sstate += '1'
-                else : sstate += '0'
+                if state & self.mask[i]:
+                    sstate += "1"
+                else:
+                    sstate += "0"
         return sstate
 
-    def Mz(self,state):
-        m2=0.0
+    def Mz(self, state):
+        m2 = 0.0
         for i in range(self.N):
-            if state&self.mask[i]: m2 += self.M2a[i,i]
+            if state & self.mask[i]:
+                m2 += self.M2a[i, i]
         return m2
 
     #########################
 
     def Sz(self, state):
-        if not self.Q3d: return 0
+        if not self.Q3d:
+            return 0
         nu = 0
         nd = 0
         for i in range(self.Nband):
-            if state&self.mask_u[i] : nu += 1
-            if state&self.mask_d[i] : nd += 1
-        return nu-nd
+            if state & self.mask_u[i]:
+                nu += 1
+            if state & self.mask_d[i]:
+                nd += 1
+        return nu - nd
 
     def S2(self, state):
         l2p1 = self.Nband
-        sts=[]
+        sts = []
         # calculating \sum_{a,b} S^z_a S^z_b + 1/2*(S^+_a S^-_b + S^-_a S^+_b)
         # diagonal part
-        dd=0;
+        dd = 0
         for ilz in range(l2p1):
-            up=0; dn=0  # this comes from 1/2(S^+_a S^-_a + S^-_a S^+_a)
-            if self.mask_u[ilz] & state: up = 1
-            if self.mask_d[ilz] & state: dn = 1
+            up = 0
+            dn = 0  # this comes from 1/2(S^+_a S^-_a + S^-_a S^+_a)
+            if self.mask_u[ilz] & state:
+                up = 1
+            if self.mask_d[ilz] & state:
+                dn = 1
             # if only up or only down in certain lz
-            if up+dn==1: dd += 0.5
+            if up + dn == 1:
+                dd += 0.5
         # Sz^2 + diagonal part of S^+ S^-
-        fct = (0.5*self.Sz(state))**2 + dd
+        fct = (0.5 * self.Sz(state)) ** 2 + dd
         # store diagonal
-        sts.append([state,fct])
+        sts.append([state, fct])
         # off diagonal
         for ilz in range(l2p1):
             im1 = self.mask_u[ilz]
             im2 = self.mask_d[ilz]
             ib1 = bool(state & im1)
             ib2 = bool(state & im2)
-            if ib1 and not ib2: # S^-_i gives nonzero
-                isig = self.sign(state, min(im1,im2), max(im1,im2))
-                istate = state^im1^im2
+            if ib1 and not ib2:  # S^-_i gives nonzero
+                isig = self.sign(state, builtins.min(im1, im2), builtins.max(im1, im2))
+                istate = state ^ im1 ^ im2
                 for jlz in range(l2p1):
-                    if (ilz==jlz): continue
+                    if ilz == jlz:
+                        continue
                     jm1 = self.mask_d[jlz]
                     jm2 = self.mask_u[jlz]
                     jb1 = bool(state & jm1)
                     jb2 = bool(state & jm2)
-                    if jb1 and not jb2: # S^+_j gives nonzero
-                        jsig = self.sign(istate, min(jm1,jm2), max(jm1,jm2))
-                        jstate = istate^jm1^jm2
-                        sts.append([jstate, isig*jsig])
+                    if jb1 and not jb2:  # S^+_j gives nonzero
+                        jsig = self.sign(
+                            istate, builtins.min(jm1, jm2), builtins.max(jm1, jm2)
+                        )
+                        jstate = istate ^ jm1 ^ jm2
+                        sts.append([jstate, isig * jsig])
         return sts
 
     def S_minus(self, state):
         l2p1 = self.Nband
-        sts=[]
+        sts = []
         # off diagonal
         for ilz in range(l2p1):
             im1 = self.mask_u[ilz]
             im2 = self.mask_d[ilz]
             ib1 = bool(state & im1)
             ib2 = bool(state & im2)
-            if ib1 and not ib2: # S^-_i gives nonzero
-                isig = self.sign(state, min(im1,im2), max(im1,im2))
-                istate = state^im1^im2
+            if ib1 and not ib2:  # S^-_i gives nonzero
+                isig = self.sign(state, builtins.min(im1, im2), builtins.max(im1, im2))
+                istate = state ^ im1 ^ im2
                 sts.append([istate, isig])
         return sts
 
     def PairHop(self, state):
-        """ Computes the pair-hopping term:  D_a^\dagger D_a , where D_a creates or
+        """Computes the pair-hopping term:  D_a^\dagger D_a , where D_a creates or
         anhilates a double occupied site. There is no minus sign in this term!
         """
-        doubles=[]
-        empty=[]
+        doubles = []
+        empty = []
         for i in range(self.Nband):
             if state & self.mask_u[i] and state & self.mask_d[i]:
                 doubles.append(i)
-            elif not(state & self.mask_u[i]) and not(state & self.mask_d[i]):
+            elif not (state & self.mask_u[i]) and not (state & self.mask_d[i]):
                 empty.append(i)
 
-        rst=[]
+        rst = []
         for id in doubles:
-            nst1 = state^self.mask_u[id]^self.mask_d[id]
+            nst1 = state ^ self.mask_u[id] ^ self.mask_d[id]
             for ie in empty:
-                nst2 = nst1^self.mask_u[ie]^self.mask_d[ie]
+                nst2 = nst1 ^ self.mask_u[ie] ^ self.mask_d[ie]
                 rst.append(nst2)
         return rst
 
     def NDouble(self, state):
         ne = 0
         for i in range(self.Nband):
-            if state & self.mask_u[i] and state & self.mask_d[i]: ne += 1
+            if state & self.mask_u[i] and state & self.mask_d[i]:
+                ne += 1
         return ne
 
     def OneBodyNab(self, state, Sab):
-        """ computing the term Sab[a,i] f^+_a f_i
+        """computing the term Sab[a,i] f^+_a f_i
         returns all matrix elements generated by the above one-body term
         when acting on state
         """
-        sts=[]
-        ni=-1
+        sts = []
+        ni = -1
         for i in range(self.baths):
-            if not(self.mask[i]&state) : continue
-            ni+=1
-            state1 = state^self.mask[i]
+            if not (self.mask[i] & state):
+                continue
+            ni += 1
+            state1 = state ^ self.mask[i]
             m1 = self.bi[i]
             s1 = self.sz[i]
             # here we have: mask[i]&state
             for a in range(self.baths):
-                if self.mask[a]&state1 : continue # sz_a == sz_j
+                if self.mask[a] & state1:
+                    continue  # sz_a == sz_j
                 # here we have: state&mask[i] and not(state1&mask[a])
-                na = self.N_el_before(state1,a)
-                state2 = state1^self.mask[a]
+                na = self.N_el_before(state1, a)
+                state2 = state1 ^ self.mask[a]
                 m2 = self.bi[a]
                 s2 = self.sz[a]
 
-                sign = 1-2*((ni+na)%2)
+                sign = 1 - 2 * ((ni + na) % 2)
 
-                nab = sign*Sab[a,i]
+                nab = sign * Sab[a, i]
 
-                if (abs(nab)>1e-6): sts.append([state2, nab])
+                if abs(nab) > 1e-6:
+                    sts.append([state2, nab])
         return sts
 
 
-def baseN(Nrange, prop,Q3d):
+def baseN(Nrange, prop, Q3d):
     Ntot = len(prop)
-    wstates=[]
+    wstates = []
 
     if Q3d:
-        for n1 in Nrange: # range(Nband*2+1):
-            for sz1 in range(-n1,n1+1,2):
-                states=[]
+        for n1 in Nrange:  # range(Nband*2+1):
+            for sz1 in range(-n1, n1 + 1, 2):
+                states = []
                 for i in range(Ntot):
-                    if prop[i][0]==n1 and prop[i][1]==sz1:
+                    if prop[i][0] == n1 and prop[i][1] == sz1:
                         states.append(i)
 
-                if (len(states)>0): wstates.append([n1, sz1, states])
+                if len(states) > 0:
+                    wstates.append([n1, sz1, states])
     else:
         for n1 in Nrange:  # range(Nband*2+1):
-            states=[]
+            states = []
             for i in range(Ntot):
-                if prop[i][0]==n1:
+                if prop[i][0] == n1:
                     states.append(i)
-            if (len(states)>0): wstates.append([n1, 0, states])
+            if len(states) > 0:
+                wstates.append([n1, 0, states])
 
     return wstates
-
 
 
 def list_to_string(x):
     return str(array(x).flatten().tolist())
 
 
-
-def analizeGroups(A, small = 1e-4):
-    groups=[]
-    for i in range(shape(A)[0]):
-        nonz=[]
-        for j in range(shape(A)[1]):
-            if abs(A[i,j])>small : nonz.append(j)
-        if (len(nonz)>0): groups.append(nonz)
-
-    groups0 = compress(groups)
-
-    groups=[]
-    for i in range(shape(A)[1]):
-        nonz=[]
-        for j in range(shape(A)[0]):
-            if abs(A[j,i])>small : nonz.append(j)
-        if (len(nonz)>0): groups.append(nonz)
-
-    groups1 = compress(groups)
-    return (groups1,groups0)
-
-def coupled(A, groups0, groups1, small = 1e-4):
-    fpair = [-1]*len(groups0)
-    for ii,ig0 in enumerate(groups0):
-        nonz=[]
-        for ir0 in ig0:
-            for q in range(shape(A)[1]):
-                if abs(A[ir0,q])>small : nonz.append(q)
-        for jj,jg1 in enumerate(groups1):
-            if overlap(nonz,jg1):
-                fpair[ii] = jj
-    return fpair
-
 def comp(x, y):
-    if x[2]!=y[2]: return int(x[2]-y[2])
+    if x[2] != y[2]:
+        return int(x[2] - y[2])
     else:
-        if abs(x[3]-y[3])<1e-5: return 0
-        elif (x[3]<y[3]): return -1
-        else: return 1
+        if abs(x[3] - y[3]) < 1e-5:
+            return 0
+        elif x[3] < y[3]:
+            return -1
+        else:
+            return 1
 
 
+def SpinOrbitM(l, T2C):
+    if l % 1 != 0:  # for non-integer l we did not work it out yet
+        return zeros(shape(T2C))
 
-def SpinOrbitM(l,T2C):
     # one electron |l,m,s> base
-    ms_base=[]
-    for s in [1/2.,-1/2.]:
-        for m in range(-l,l+1):
-            ms_base.append([m,s])
-    #print 'ms_base=', ms_base
+    ms_base = []
+    for s in [1 / 2.0, -1 / 2.0]:
+        for m in range(-l, l + 1):
+            ms_base.append([m, s])
+    # print 'ms_base=', ms_base
 
     # one electron |j,mj> base
-    pj = [l-1/2.,l+1/2.]
-    if l==0 : pj = [0.5]
-    jj_base=[]
+    pj = [l - 1 / 2.0, l + 1 / 2.0]
+    if l == 0:
+        pj = [0.5]
+    jj_base = []
     for j in pj:
-        for mj in arange(-j,j+1):
+        for mj in arange(-j, j + 1):
             jj_base.append([j, mj])
-    #print 'jj_base=', jj_base
+    # print 'jj_base=', jj_base
 
     # transforms between |lms> and |jmj> base
-    Tjls = zeros((len(ms_base),len(jj_base)))
-    for ijj,jj in enumerate(jj_base):
-        for ims,ms in enumerate(ms_base):
-            Tjls[ijj,ims] = gaunt.clebschg(jj[0], jj[1], l, ms[0], 1/2., ms[1])
+    Tjls = zeros((len(ms_base), len(jj_base)))
+    for ijj, jj in enumerate(jj_base):
+        for ims, ms in enumerate(ms_base):
+            Tjls[ijj, ims] = gaunt.clebschg(jj[0], jj[1], l, ms[0], 1 / 2.0, ms[1])
 
     # the one-body operator l*s in matrix form
     # in the j-j base
-    jSO = zeros((len(jj_base),len(jj_base)))
-    for ijj,jj in enumerate(jj_base):
-        jSO[ijj,ijj] = 0.5*(jj[0]*(jj[0]+1) - l*(l+1) - 3/4.)
-
-
-    #print 'jSO=', jSO
-    #mprint(jSO)
+    jSO = zeros((len(jj_base), len(jj_base)))
+    for ijj, jj in enumerate(jj_base):
+        jSO[ijj, ijj] = 0.5 * (jj[0] * (jj[0] + 1) - l * (l + 1) - 3 / 4.0)
 
     # changing to lms base
-    mSO = matrix(Tjls.transpose())*matrix(jSO)*matrix(Tjls)
+    mSO = matrix(Tjls.transpose()) * matrix(jSO) * matrix(Tjls)
 
     # creating large T2C base
-    if ( len(T2C) < len(jj_base) ):
-        T2Cl = zeros(tuple(array(shape(T2C))*2),dtype=complex)
-        T2Cl[:len(T2C),:len(T2C)] = T2C
-        T2Cl[len(T2C):,len(T2C):] = T2C
+    if len(T2C) < len(jj_base):
+        T2Cl = zeros(tuple(array(shape(T2C)) * 2), dtype=complex)
+        T2Cl[: len(T2C), : len(T2C)] = T2C
+        T2Cl[len(T2C) :, len(T2C) :] = T2C
     else:
         T2Cl = T2C
 
     # changing to cubic harmonics base
     cSO = matrix(conj(T2Cl.transpose())) * mSO * matrix(T2Cl)
 
-    print >> fh_info, 'spin-orbit='
-    mprint(fh_info,real(cSO))
+    print("spin-orbit=", file=fh_info)
+    mprint(fh_info, real(cSO))
 
     return cSO
 
 
 def Diagonalize(Ham, small=1e-4, fh=sys.stdout):
-    """ Diagonalization is done in blocks. This is not because of efficiency but because
+    """Diagonalization is done in blocks. This is not because of efficiency but because
     the resulting eigenvectors must not mix states of direct base if not absolutely necessary.
     If brute force diagonalization is used in large scale problems, eigenvectors can be seriously
     mix direct states with different symmetry.
     """
-    diff = sum(Ham-transpose(conj(Ham)))
-    if abs(diff)>1e-6:
-        print 'H NOT HERMITIAN!'
+    diff = sum(Ham - Ham.conj().T)  # transpose(conj(Ham)))
+    if abs(diff) > 1e-6:
+        print("H NOT HERMITIAN!")
 
     # Check block structure of Hamiltonian
     # States which are mixed in Ham will have the same blck[i]
     ndim = len(Ham)
-    blck=range(ndim)
+    blck = list(range(ndim))
     for i in range(ndim):
-        for j in range(i+1,ndim):
-            if (abs(Ham[i][j])>small):
-                commonb = min(blck[i],blck[j])
+        for j in range(i + 1, ndim):
+            if abs(Ham[i][j]) > small:
+                commonb = builtins.min(blck[i], blck[j])
                 for k in range(ndim):
-                    if blck[k] in [blck[i],blck[j]]: blck[k]=commonb
-        #print ('%2d'%i), 'current blck=', '%2d,'*len(blck) % tuple(blck)
+                    if blck[k] in [blck[i], blck[j]]:
+                        blck[k] = commonb
+        # print ('%2d'%i), 'current blck=', '%2d,'*len(blck) % tuple(blck)
 
     # Having blck[i] a new array block[:][:] is created, which contains indexes to all blocks
     # for example [[1,2,3],[4,5,6]] for Hamiltonian containing two blocks
-    block=[]
+    block = []
     for i in range(ndim):
-        bb=[]
+        bb = []
         for j in range(ndim):
-            if blck[j]==i: bb.append(j)
-        if len(bb)>0:
+            if blck[j] == i:
+                bb.append(j)
+        if len(bb) > 0:
             block.append(bb)
-    #print 'block=', block
+    # print 'block=', block
 
     # Here we go over all blocks and diagonalize each one.
-    eigv=[] # contains all eigenvalues
-    eigx=[] # contains full eigenvectors
-    for ibl,bl in enumerate(block):
-        hs = zeros((len(bl),len(bl)), dtype=complex)
-        for i,ib in enumerate(bl):
-            for j,jb in enumerate(bl):
-                hs[i,j] = Ham[ib,jb]
+    eigv = []  # contains all eigenvalues
+    eigx = []  # contains full eigenvectors
+    for ibl, bl in enumerate(block):
+        hs = zeros((len(bl), len(bl)), dtype=complex)
+        for i, ib in enumerate(bl):
+            for j, jb in enumerate(bl):
+                hs[i, j] = Ham[ib, jb]
 
-        if symeig_available:
-            eigy = symeig.symeig(hs) # diagonalization of small block
-        else:
-            eigy = linalg.eigh(hs)
+        eigy = linalg.eigh(hs)
 
-        print >> fh, 'Eigenvalues[',bl,']=',eigy[0]
+        print("Eigenvalues[", bl, "]=", eigy[0], file=fh)
 
         # Checking if eigenvectors are complex!
         for l in range(len(eigy[1])):
-            imax=0
-            #print 'shape(eigy[1])', shape(eigy[1])
+            imax = 0
+            # print 'shape(eigy[1])', shape(eigy[1])
             for iu in range(len(eigy[0])):
-                #print iu, imax
-                if abs(eigy[1][iu,l])>abs(eigy[1][imax,l]): imax=iu
-            z=eigy[1][imax,l]
-            phi=math.atan2(z.imag,z.real)
-            eigy[1][:,l] *= exp(-phi*1j)
+                # print iu, imax
+                if abs(eigy[1][iu, l]) > abs(eigy[1][imax, l]):
+                    imax = iu
+            z = eigy[1][imax, l]
+            phi = math.atan2(z.imag, z.real)
+            eigy[1][:, l] *= exp(-phi * 1j)
 
-            ime = sum([abs(x.imag) for x in eigy[1][:,l]])
-            if (abs(ime))<1e-10: ime=0
-            print >> fh, 'im=%2d %2d %f' % (ibl, l, ime)
-            #ime = sum([abs(eigy[1][u,l].imag) for u in range(len(eigy[1]))])
+            ime = sum([abs(x.imag) for x in eigy[1][:, l]])
+            if (abs(ime)) < 1e-10:
+                ime = 0
+            print("im=%2d %2d %f" % (ibl, l, ime), file=fh)
+            # ime = sum([abs(eigy[1][u,l].imag) for u in range(len(eigy[1]))])
         #    if ime>1e-7: print 'TROUBLES!!! Complex eigenvector! You sould improve that!'
 
         # Creating a big eigenvector with all components
         for l in range(len(eigy[1])):
-            large_eig=zeros(ndim, dtype=complex)
-            small_eig = eigy[1][:,l]
-            for m,mb in enumerate(bl):  large_eig[mb] = small_eig[m]
+            large_eig = zeros(ndim, dtype=complex)
+            small_eig = eigy[1][:, l]
+            for m, mb in enumerate(bl):
+                large_eig[mb] = small_eig[m]
             eigx.append(large_eig)
         eigv += eigy[0].tolist()
 
     # Now we need to sort eigenvectors and eigenvalues
     # index is created for sorting
-    indx=range(ndim)
-
-    indx.sort(lambda a,b: cmp(eigv[a],eigv[b]))
+    # indx=list(range(ndim))
+    # indx.sort(key=lambda a: eigv[a]) #lambda a,b: cmp(eigv[a],eigv[b]))
+    indx = sorted(range(ndim), key=lambda a: eigv[a])
     # and actual sorting is performed
-    seigv=[]
-    seigx=[]
-    for i in range(ndim):
-        seigv.append(eigv[indx[i]])
-        seigx.append(eigx[indx[i]])
+    seigv = [eigv[i] for i in indx]
+    seigx = [eigx[i] for i in indx]
+    # seigv=[]
+    # seigx=[]
+    # for i in range(ndim):
+    #    seigv.append(eigv[indx[i]])
+    #    seigx.append(eigx[indx[i]])
 
     # Eigenvectors should be in the form Ham*v[:,i] = w[i]*v[:,i]
     # which means that we need to transpose the list of eigenvectors
-    seigx = array(seigx).transpose()
+    seigx = array(seigx).T
+    seigv = array(seigv)
 
     # We also do a brute force diagonalization just to check if something goes wrong with block diagonalization
     # Note that the two resulting eigensystems are not necessary the same due to freedom in choosing eigenvectors
-    eig = linalg.eigh(Ham)
+    # eig = linalg.eigh(Ham)
+    eig = linalg.eigvalsh(Ham)
 
+    # print('eig=', eig, 'Ham=', Ham)
     # If eigenvalues from block diagonalization and full diagonalization are different, something is wrong
-    if sum(map(abs,eig[0]-array(seigv)))>small:
-        print '!!!!!TEZAVE!'
-        print 'The right eigenvalues are:', eig[0]
+    if sum(abs(eig - seigv)) > small:
+        print("!!!!!TEZAVE!")
+        print("The right eigenvalues are:", eig)
 
-    return [seigv,seigx]
-
-def EquivalentBaths(Eimp):
-    """ Finds which baths are equivalent from impurity levels"""
-
-    print baths
-    sys.exit(0)
+    return [seigv, seigx]
 
 
-    wE = [(i,Eimp[i]) for i in range(len(Eimp))]
-    #print 'wE=', wE
-    kbths=[]
-    while len(wE)>0:
-        En = wE[0][1]
-        j=0
-        rr=[]
-        while j < len(wE):
-            if abs(En-wE[j][1])<1e-10:
-                rr.append(wE[j][0])
-                del wE[j]
-            else: j+=1
-            #print 'w', j, rr, En, wE[j][1]
-        kbths.append(rr)
-
-    bathis=range(len(Eimp))
-    for ik,k in enumerate(kbths):
-        for ij in k: bathis[ij]=ik
-
-    #print 'kbths=', kbths
-    Ed=[]
-    for ik,k in enumerate(kbths):
-        Ed.append(Eimp[k[0]])
-
-    return (bathis,kbths,Ed)
-
-def thesame(mx,my,small=1e-3):
-    if mx.keys() != my.keys(): return False
-    for k in mx.keys():
-        if abs(mx[k]-my[k])>small: return False
+def thesame(mx, my, small=1e-3):
+    if list(mx.keys()) != list(my.keys()):
+        return False
+    for k in list(mx.keys()):
+        if abs(mx[k] - my[k]) > small:
+            return False
     return True
 
-def VEquivalentStates(mps,ind):
-    """ Finds which states have the same bubbles """
-    wx = [(i,mps[i]) for i in range(len(mps))]
-    iequiv=[]
-    while len(wx)>0:
+
+def VEquivalentStates(mps, ind):
+    """Finds which states have the same bubbles"""
+    wx = [(i, mps[i]) for i in range(len(mps))]
+    iequiv = []
+    while len(wx) > 0:
         mx = wx[0][1]
-        j=0
-        rr=[]
+        j = 0
+        rr = []
         while j < len(wx):
-            if thesame(mx,wx[j][1]):
+            if thesame(mx, wx[j][1]):
                 rr.append(wx[j][0])
                 del wx[j]
-            else: j+=1
+            else:
+                j += 1
         iequiv.append(rr)
 
     for ik in range(len(iequiv)):
@@ -1109,586 +954,623 @@ def VEquivalentStates(mps,ind):
 
     return iequiv
 
-def AverageBubbles(tmps):
-    """ Compute average over 'almost' equivalent states """
-    trmp=[]
-    for mps in tmps:
-        all_keys=[]
-        for mp in mps:
-            all_keys = union(all_keys,mp.keys())
 
-        rmp={}
+def AverageBubbles(tmps):
+    """Compute average over 'almost' equivalent states"""
+    trmp = []
+    for mps in tmps:
+        all_keys = []
+        for mp in mps:
+            all_keys = union(all_keys, list(mp.keys()))
+
+        rmp = {}
         for k in all_keys:
-            sm=0.0
+            sm = 0.0
             for mp in mps:
-                if mp.has_key(k):
+                if k in mp:
                     sm += mp[k]
-            #sm/=len(mps)
-            rmp[k]=sm
+            # sm/=len(mps)
+            rmp[k] = sm
         trmp.append(rmp)
     return trmp
 
 
 def EquivalentStates(ipE, ipN):
-    iequiv=[]
-    equiv = range(len(ipE))
-    leq=0
-    ju=0
+    iequiv = []
+    equiv = list(range(len(ipE)))
+    leq = 0
+    ju = 0
     Nmax = ipN[-1]
-    for Ni in range(Nmax+1):
+    for Ni in range(Nmax + 1):
         # all states of the same N are in the interval [ju,je]
-        je=ju
-        while je<len(ipN) and ipN[je]==Ni: je+=1
+        je = ju
+        while je < len(ipN) and ipN[je] == Ni:
+            je += 1
 
-        ind = range(ju,je)
-        ind.sort(lambda x,y: cmp(ipE[x],ipE[y]) )
+        ind = list(range(ju, je))
+        ind.sort(lambda x, y: cmp(ipE[x], ipE[y]))
 
-        #print Ni
-        i0=0
-        while (i0<len(ind)):
+        # print Ni
+        i0 = 0
+        while i0 < len(ind):
             Ec = ipE[ind[i0]]
-            ieq=[]
-            #print 'Ec=', Ec
-            while i0<len(ind) and abs(ipE[ind[i0]]-Ec)<1e-10:
-                #print ind[i0], ipE[ind[i0]], leq
+            ieq = []
+            # print 'Ec=', Ec
+            while i0 < len(ind) and abs(ipE[ind[i0]] - Ec) < 1e-10:
+                # print ind[i0], ipE[ind[i0]], leq
                 equiv[ind[i0]] = leq
                 ieq.append(ind[i0])
-                i0+=1
+                i0 += 1
             leq += 1
             iequiv.append(ieq)
-            #print
-        #print
-        ju=je
+            # print
+        # print
+        ju = je
     return (equiv, iequiv)
+
 
 def RenumberStates(pseudostates, Enes, wstates, S2ws):
     # renumbers states such that each of 1024 states has unique index
     # also remembers energy and N for each state
-    ij=0
-    puniq={}
-    ipuniq=[]
-    ipE=[]
-    ipN=[]
-    ipS=[]
-    for ii,iwp in enumerate(pseudostates):
+    ij = 0
+    puniq = {}
+    ipuniq = []
+    ipE = []
+    ipN = []
+    ipS = []
+    for ii, iwp in enumerate(pseudostates):
         wdim = len(Enes[ii])
         for j in range(wdim):
-            puniq[(ii,j)]=ij
-            ipuniq.append((ii,j))
+            puniq[(ii, j)] = ij
+            ipuniq.append((ii, j))
             ipE.append(Enes[ii][j])
             ipS.append(S2ws[ii][j])
             wN = sum(wstates[iwp[0]][0])
             ipN.append(wN)
-            ij+=1
+            ij += 1
     return (puniq, ipE, ipN, ipS)
 
 
-def CreateEmpty3D_Dict(n0,n1,n2):
+def CreateEmpty3D_Dict(n0, n1, n2):
     return [[[{} for i2 in range(n2)] for i1 in range(n1)] for i0 in range(n0)]
-def CreateEmpty2D_Dict(n0,n1):
+
+
+def CreateEmpty2D_Dict(n0, n1):
     return [[{} for i1 in range(n1)] for i0 in range(n0)]
 
 
 def ReadTrans(filename, fh_info):
     """Read the self-energy index file Sigind and the local transformation matrix CF from a file"""
-    fh = open(filename, 'r')
-    data = fh.readlines()
+    with open(filename, "r") as fh:
+        data = fh.readlines()
 
-    (n1,n2) = map(int, data[0].split()[:2])
+    (n1, n2) = list(map(int, data[0].split()[:2]))
 
-    Sigind=[]
+    Sigind = []
     for i in range(n1):
-        Sigind.append( map(int, data[i+2].split()[:n2]) )
+        Sigind.append(list(map(int, data[i + 2].split()[:n2])))
     Sigind = array(Sigind)
 
-    print >> fh_info, 'len(data)', len(data)
-    print >> fh_info, 'n1=', n1
-    if len(data) >= n1+n1+3:
+    print("len(data)", len(data), file=fh_info)
+    print("n1=", n1, file=fh_info)
+    if len(data) >= n1 + n1 + 3:
         n2 = n1
-        CF=[]
+        CF = []
         for i in range(n2):
-            cl = array(map(float, data[n1+3+i].split()))
-            CF.append( cl[0::2]+cl[1::2]*1j )
+            cl = array(list(map(float, data[n1 + 3 + i].split())))
+            CF.append(cl[0::2] + cl[1::2] * 1j)
         CF = array(CF)
-    elif len(data)>=n1+n1/2+3:
-        n2 = n1/2
-        CF=[]
+    elif len(data) >= int(n1 + n1 / 2 + 3):
+        n2 = int(n1 / 2)
+        CF = []
         for i in range(n2):
-            cl = array(map(float, data[n1+3+i].split()))
-            CF.append( cl[0::2]+cl[1::2]*1j )
+            cl = array(list(map(float, data[n1 + 3 + i].split())))
+            CF.append(cl[0::2] + cl[1::2] * 1j)
         CF = array(CF)
-        CFN = zeros((2*n2,2*n2), dtype=complex)
-        CFN[:n2,:n2] = CF
-        CFN[n2:,n2:] = CF
+        CFN = zeros((2 * n2, 2 * n2), dtype=complex)
+        CFN[:n2, :n2] = CF
+        CFN[n2:, n2:] = CF
         CF = CFN
     else:
         CF = identify(n1)
-    print >> fh_info, 'CF=', CF
+    print("shape(CF)=", shape(CF), "shape(Sigind)=", shape(Sigind), file=fh_info)
 
     return (Sigind, CF)
 
-def SlaterF(U, J, l):
-    Fk = zeros((4,4), dtype=float)
-    if l==0:
-        # F0 for s-electrons
-        Fk[0,0] = U
-    elif l==1:
-        # F2 for p-electrons
-        Fk[0,1] = U
-        if type(J) is list:
-            Fk[1,1] = 5*J[0]
-        else:
-            Fk[1,1] = 5*J
-    elif l==2:
-        # F2 and F4 for d-electrons
-        Fk[0,2] = U
-        if type(J) is list:
-            Fk[1,2] = 14./1.625 * J[0]
-            Fk[2,2] = 14.*0.625/1.625 * J[1]
-        else:
-            Fk[1,2] = 14./1.625 * J
-            Fk[2,2] = 14.*0.625/1.625 * J
-    elif l==3:
-        # F2, F4 and F6 for f-electrons
-        Fk[0,3] = U
-        if type(J) is list:
-            Fk[1,3] = 6435./(286+195*0.668+250*0.494) * J[0]
-            Fk[2,3] = 0.668*6435./539.76 * J[1]
-            Fk[3,3] = 0.494*6435./539.76 * J[2]
-        else:
-            Fk[1,3] = 6435./(286+195*0.668+250*0.494) * J
-            Fk[2,3] = 0.668*6435./539.76 * J
-            Fk[3,3] = 0.494*6435./539.76 * J
-    return Fk
 
+def SlaterF(U, J, l):
+    Fk = zeros((4, 4), dtype=float)
+    if l == 0:
+        # F0 for s-electrons
+        Fk[0, 0] = U
+    elif l == 1:
+        # F2 for p-electrons
+        Fk[0, 1] = U
+        if type(J) is list:
+            Fk[1, 1] = 5 * J[0]
+        else:
+            Fk[1, 1] = 5 * J
+    elif l == 2:
+        # F2 and F4 for d-electrons
+        Fk[0, 2] = U
+        if type(J) is list:
+            Fk[1, 2] = 14.0 / 1.625 * J[0]
+            Fk[2, 2] = 14.0 * 0.625 / 1.625 * J[1]
+        else:
+            Fk[1, 2] = 14.0 / 1.625 * J
+            Fk[2, 2] = 14.0 * 0.625 / 1.625 * J
+    elif l == 3:
+        # F2, F4 and F6 for f-electrons
+        Fk[0, 3] = U
+        if type(J) is list:
+            Fk[1, 3] = 6435.0 / (286 + 195 * 0.668 + 250 * 0.494) * J[0]
+            Fk[2, 3] = 0.668 * 6435.0 / 539.76 * J[1]
+            Fk[3, 3] = 0.494 * 6435.0 / 539.76 * J[2]
+        else:
+            Fk[1, 3] = 6435.0 / (286 + 195 * 0.668 + 250 * 0.494) * J
+            Fk[2, 3] = 0.668 * 6435.0 / 539.76 * J
+            Fk[3, 3] = 0.494 * 6435.0 / 539.76 * J
+    return Fk
 
 
 def Check_T2C_Real(T2C, l, fh_info, small):
     """
-     Here we added a routine which checks that cubic harmonics are real.
-     Only in this case operators F^+ and F used in ctqmc will be real.
-     Otherwise these matrix elements might be complex.
-     The condition for cubic harmonics to be real is:
+    Here we added a routine which checks that cubic harmonics are real.
+    Only in this case operators F^+ and F used in ctqmc will be real.
+    Otherwise these matrix elements might be complex.
+    The condition for cubic harmonics to be real is:
 
-      Imag( T2C[m,i] + (-1)**m * T2C[-m,i] ) == 0
-        and
-      Real( T2C[m,i] - (-1)**m * T2C[-m,i] ) ==0
+     Imag( T2C[m,i] + (-1)**m * T2C[-m,i] ) == 0
+       and
+     Real( T2C[m,i] - (-1)**m * T2C[-m,i] ) ==0
 
-     which follows from the requirement: \sum_m T2C[m,i]*exp(i*m*phi) is real for any phi
+    which follows from the requirement: \sum_m T2C[m,i]*exp(i*m*phi) is real for any phi
 
-     We can also derive this from the definition
-        T2C[m,i]==<Y_{lm}|Phi_i>
-     and the fact that localized orbital |Phi> is real, hence
-       T2C[m,i]^* = <Y_{lm}|Phi_i>^* = <Y_{lm}^*|Phi_i> = (-1)^m <Y_{l,-m}|Phi_i> = (-1)^m T2C[l,-m]
+    We can also derive this from the definition
+       T2C[m,i]==<Y_{lm}|Phi_i>
+    and the fact that localized orbital |Phi> is real, hence
+      T2C[m,i]^* = <Y_{lm}|Phi_i>^* = <Y_{lm}^*|Phi_i> = (-1)^m <Y_{l,-m}|Phi_i> = (-1)^m T2C[l,-m]
 
-     We are free to add any phase to cubic harmonics, hence T2C[m,i] -> T2C[m,i]*exp(i*phi_i)
-       with phi_i being arbitrary
+    We are free to add any phase to cubic harmonics, hence T2C[m,i] -> T2C[m,i]*exp(i*phi_i)
+      with phi_i being arbitrary
 
-     This leads to the following 2x2 system of equations:
-      ( Rp[m,i], Qp[m,i] ) ( sin(phi_i) )
-      ( Qm[m,i], Rm[m,i] ) ( cos(phi_i) ) = 0
+    This leads to the following 2x2 system of equations:
+     ( Rp[m,i], Qp[m,i] ) ( sin(phi_i) )
+     ( Qm[m,i], Rm[m,i] ) ( cos(phi_i) ) = 0
 
-     where
-          Qp[m,i] = Imag( T2C[m,i] + (-1)**m * T2C[-m,i] )
-          Rm[m,i] = Real( T2C[m,i] - (-1)**m * T2C[-m,i] )
-          Rp[m,i] = Real( T2C[m,i] + (-1)**m * T2C[-m,i] )
-          Qm[m,i] = Imag(-T2C[m,i] + (-1)**m * T2C[-m,i] )
+    where
+         Qp[m,i] = Imag( T2C[m,i] + (-1)**m * T2C[-m,i] )
+         Rm[m,i] = Real( T2C[m,i] - (-1)**m * T2C[-m,i] )
+         Rp[m,i] = Real( T2C[m,i] + (-1)**m * T2C[-m,i] )
+         Qm[m,i] = Imag(-T2C[m,i] + (-1)**m * T2C[-m,i] )
     """
+    if l % 1 != 0:
+        return  # This is not worked out for half-integer l
+    Nls = int(2 * l + 1)
+    for i in range(Nls):
+        ctg = None
+        indexm = list(range(l + 1))
+        indexm = sorted(
+            indexm, key=lambda m: abs(T2C[m + l, i]) + abs(T2C[-m + l, i]), reverse=True
+        )
 
-    for i in range(2*l+1):
-        ctg=None
-        indexm = range(l+1)
-        indexm = sorted(indexm, key=lambda m: abs(T2C[m+l,i])+abs(T2C[-m+l,i]), reverse=True)
-
-        print >> fh_info, 'sorted by magnitude'
+        print("sorted by magnitude", file=fh_info)
         for m in indexm:
-            print >> fh_info, m, T2C[m+l,i],T2C[-m+l,i]
+            print(m, T2C[m + l, i], T2C[-m + l, i], file=fh_info)
 
         for m in indexm[:1]:  # We will do it such that only the largest component is OK
-            Qp = T2C[m+l,i].imag + (-1)**m * T2C[-m+l,i].imag
-            Rm = T2C[m+l,i].real - (-1)**m * T2C[-m+l,i].real
-            Rp = T2C[m+l,i].real + (-1)**m * T2C[-m+l,i].real
-            Qm =-T2C[m+l,i].imag + (-1)**m * T2C[-m+l,i].imag
-            #print 'Qp=', Qp, 'Rm=', Rm
+            Qp = T2C[m + l, i].imag + (-1) ** m * T2C[-m + l, i].imag
+            Rm = T2C[m + l, i].real - (-1) ** m * T2C[-m + l, i].real
+            Rp = T2C[m + l, i].real + (-1) ** m * T2C[-m + l, i].real
+            Qm = -T2C[m + l, i].imag + (-1) ** m * T2C[-m + l, i].imag
+            # print (m, l, 'Qp=', Qp, 'Rm=', Rm, 'Rp=', Rp, 'Qm=', Qm)
             if abs(Qp) > small or abs(Rm) > small:
-                if abs(Qp) > small :
-                    ctg = -Rp/Qp
+                if abs(Qp) > small:
+                    ctg = -Rp / Qp
                     xb = -Rp
                     xa = Qp
-                if abs(Rm) > small :
-                    ctg = -Qm/Rm
+                if abs(Rm) > small:
+                    ctg = -Qm / Rm
                     xb = -Qm
                     xa = Rm
-                #break
+                # break
 
         if ctg is not None:
             phi = arctan2(xa, xb)
-            print >> fh_info, 'Correcting T2C because original cubic harmonics were not real. Vector=', i, 'phase=', phi
-            print >> fh_info, 'T2C^T before correction:'
+            print(
+                "Correcting T2C because original cubic harmonics were not real. Vector=",
+                i,
+                "phase=",
+                phi,
+                file=fh_info,
+            )
+            print("T2C^T before correction:", file=fh_info)
             cprint2(fh_info, T2C.transpose())
-            T2C[:,i] = T2C[:,i] * exp(phi*1j)
-            print >> fh_info, 'T2C^T after correction:'
+            T2C[:, i] = T2C[:, i] * exp(phi * 1j)
+            print("T2C^T after correction:", file=fh_info)
             cprint2(fh_info, T2C.transpose())
 
-            for m in range(0,l+1):
-                Rm = T2C[m+l,i].real - (-1)**m * T2C[-m+l,i].real
-                Qp = T2C[m+l,i].imag + (-1)**m * T2C[-m+l,i].imag
-                #Rp = T2C[m+l,i].real + (-1)**m * T2C[-m+l,i].real
-                #Qm =-T2C[m+l,i].imag + (-1)**m * T2C[-m+l,i].imag
-                #print 'm=', m, 'Rm=', Rm, 'Qp=', Qp
+            for m in range(l + 1):
+                Rm = T2C[m + l, i].real - (-1) ** m * T2C[-m + l, i].real
+                Qp = T2C[m + l, i].imag + (-1) ** m * T2C[-m + l, i].imag
+                # Rp = T2C[m+l,i].real + (-1)**m * T2C[-m+l,i].real
+                # Qm =-T2C[m+l,i].imag + (-1)**m * T2C[-m+l,i].imag
+                # print 'm=', m, 'Rm=', Rm, 'Qp=', Qp
 
-                if abs(Rm)>10*small or abs(Qp)>10*small:
-                    print 'ERROR: Could not find an angle to make all cubic harmonics real for vector=', i, 'and m=', m, 'D[Real]=', Rm, 'D[Imag]=', Qp
-                    print >> fh_info, 'ERROR: Could not find an angle to make all cubic harmonics real for vector=', i, 'and m=', m, 'D[Real]=', Rm, 'D[Imag]=', Qp
+                if abs(Rm) > 10 * small or abs(Qp) > 10 * small:
+                    print(
+                        "ERROR: Could not find an angle to make all cubic harmonics real for vector=",
+                        i,
+                        "and m=",
+                        m,
+                        "D[Real]=",
+                        Rm,
+                        "D[Imag]=",
+                        Qp,
+                    )
+                    print(
+                        "ERROR: Could not find an angle to make all cubic harmonics real for vector=",
+                        i,
+                        "and m=",
+                        m,
+                        "D[Real]=",
+                        Rm,
+                        "D[Imag]=",
+                        Qp,
+                        file=fh_info,
+                    )
 
 
 def FindCoupledBaths(Sigind):
     # Finds which baths are coupled together through off-diagonal terms
-    wcoupled=[]
-    left_in = range(len(Sigind))
+    wcoupled = []
+    left_in = list(range(len(Sigind)))
     while left_in:
-        ic=left_in[0]
-        if Sigind[ic,ic]==0:
+        ic = left_in[0]
+        if Sigind[ic, ic] == 0:
             left_in.remove(ic)
             continue
-        coupled=[ic]
+        coupled = [ic]
         for j in left_in:
-            if j!=ic and Sigind[ic,j]!=0:
+            if j != ic and Sigind[ic, j] != 0:
                 coupled.append(j)
-        for j in coupled: left_in.remove(j)
+        for j in coupled:
+            left_in.remove(j)
 
         wcoupled.append(coupled)
     return wcoupled
 
 
-def FastIsing(Nrange):
-    def inside(i,lim):
-        if i<=0 or i>lim:
+def FastIsing(Nrange, UC):
+    def inside(i, lim):
+        if i <= 0 or i > lim:
             return 0
         else:
             return i
 
-    print 'Br:', 'Stage00: Fast Ising Computations'
-    print >> fh_info, 'Stage00: Fast Ising Computation'
-    Eimpc = zeros( 2*(2*l+1) )
+    print("Br:", "Stage00: Fast Ising Computations")
+    print("Stage00: Fast Ising Computation", file=fh_info)
+    Eimpc = zeros(int(2 * (2 * l + 1)))
     for ic in range(len(Sigind)):
-        Eimpc[ic] = Eimp[Sigind[ic,ic]-1]
-    print >> fh_info, 'Eimpc=', Eimpc
+        Eimpc[ic] = Eimp[Sigind[ic, ic] - 1]
+    print("Eimpc=", Eimpc, file=fh_info)
 
-    bath=[]
+    bath = []
     for ic in range(len(Sigind)):
-        if Eimpc[ic]<1000:
+        if Eimpc[ic] < 1000:
             if Q3d:
                 bath.append(op.bi[ic])
             else:
                 bath.append(ic)
-    bath=array(bath)
+    bath = array(bath, dtype=int)
 
-    print >> fh_info, 'bath=', bath
+    print("bath=", bath, file=fh_info)
 
-    if l==3:
-        global_flip=[0,1,2,2,1,0,3,4,5,6,6,5,4,3]
+    if l == 3:
+        global_flip = [0, 1, 2, 2, 1, 0, 3, 4, 5, 6, 6, 5, 4, 3]
     else:
         if Q3d:
-            #global_flip = range(2*l+1) + range(2*l+1)
+            # global_flip = range(2*l+1) + range(2*l+1)
             global_flip = bath
         else:
-            #global_flip = [i/2 for i in range(2*(2*l+1))]
-            global_flip = [i/2 for i in bath]
-
+            # global_flip = [i/2 for i in range(2*(2*l+1))]
+            global_flip = [i / 2 for i in bath]
 
     wNrange = Nrange[:]
-    if Nrange[0]!=0:
-        wNrange = [Nrange[0]-1]+wNrange
-    if Nrange[-1]!=(2*l+1)*2:
-        wNrange = wNrange+[Nrange[-1]+1]
-    print >> fh_info, 'START: wNrange=', wNrange
+    if Nrange[0] != 0:
+        wNrange = [Nrange[0] - 1] + wNrange
+    if Nrange[-1] != int((2 * l + 1) * 2):
+        wNrange = wNrange + [Nrange[-1] + 1]
+    print("START: wNrange=", wNrange, file=fh_info)
 
-    temp_states=[]
-    temp_occ=[]
+    temp_states = []
+    temp_occ = []
     for i in range(Ntot):
         occ = array(op.occup(i))
-        if sum(occ) in wNrange and sum(occ*Eimpc)<1000:
-            #print i, occ, sum(occ*Eimpc)
+        if sum(occ) in wNrange and sum(occ * Eimpc) < 1000:
+            # print i, occ, sum(occ*Eimpc)
             temp_states.append(i)
-            temp_occ.append( occ )
-    sstates=[]
-    Nstates=[]
+            temp_occ.append(occ)
+    sstates = []
+    Nstates = []
     for n in wNrange:
         for ind in range(len(temp_states)):
-            if sum(temp_occ[ind])==n:
+            if sum(temp_occ[ind]) == n:
                 sstates.append(temp_states[ind])
                 Nstates.append(temp_occ[ind])
-    Nlimits={}
-    iis=iie=0
+    Nlimits = {}
+    iis = iie = 0
     for n in wNrange:
-        while(iie<len(Nstates) and sum(Nstates[iie])<=n): iie+=1
-        Nlimits[n] = (iis,iie)
-        iis=iie
+        while iie < len(Nstates) and sum(Nstates[iie]) <= n:
+            iie += 1
+        Nlimits[n] = (iis, iie)
+        iis = iie
 
-    print 'Br:', 'Stage0: Exact diagonalization of the atom'
-    print >> fh_info, 'Stage0: Exact diagonalization of the atom'
+    print("Br:", "Stage0: Exact diagonalization of the atom")
+    print("Stage0: Exact diagonalization of the atom", file=fh_info)
 
-    code5f="""
-        #include <complex>
-        using namespace std;
-        for (int i=0; i<Eimpc.size(); i++) EUterms(0) += Eimpc(i)*occ(i);
-        for (int i=0; i<Eimpc.size(); i++){
-            for (int j=0; j<Eimpc.size(); j++){
-                double dsum=0.0;
-                dsum += (UC(0,i,j,j,i)-UC(0,i,j,i,j)).real()*FkoJ(0);
-                for (int k=1; k<maxk; k++){
-                    dsum += (UC(k,i,j,j,i)-UC(k,i,j,i,j)).real()*FkoJ(k);
-                }
-                EUterms(1) += 0.5*dsum * occ(i)*occ(j);
-            }
-        }
-    """
-    code3d="""
-        #include <complex>
-        using namespace std;
-        for (int i=0; i<Eimpc.size(); i++) EUterms(0) += Eimpc(i)*occ(i);
-        for (int i=0; i<bath.size(); i++){
-            int ii = bath(i);
-            int si = (i*2)/bath.size();
-            for (int j=0; j<Eimpc.size(); j++){
-                int jj = bath(j);
-                int sj = (j*2)/bath.size();
-                double dsum=0.0;
-                dsum += UC(0,ii,jj,jj,ii).real()*FkoJ(0);
-                if (si==sj) dsum -= UC(0,ii,jj,ii,jj).real()*FkoJ(0);
-                for (int k=1; k<maxk; k++){
-                    dsum += UC(k,ii,jj,jj,ii).real()*FkoJ(k);
-                    if (si==sj) dsum -= UC(k,ii,jj,ii,jj).real()*FkoJ(k);
-                }
-                EUterms(1) += 0.5*dsum * occ(i)*occ(j);
-            }
-        }
-    """
-
-    FORTRAN=True
-    FkoJ = array(Fk[:,l])
-    maxk=l+1
-    Ene=zeros(len(sstates)) # Energy
-    for js,st in enumerate(sstates):
+    FORTRAN = True
+    maxk = l + 1
+    FkoJ = array(Fk[:maxk, l])
+    Ene = zeros(len(sstates))  # Energy
+    for js, st in enumerate(sstates):
         # on-site Energies in base of cubic harmonics, contain crystal-field splittings
         occ = array(Nstates[js])
-        EUterms=zeros(2)
+        EUterms = zeros(2)
         if Q3d:
             if FORTRAN:
-                weave.inline(code3d, ['EUterms','bath','Eimpc','occ','UC','FkoJ','maxk'],type_converters=weave.converters.blitz, compiler = 'gcc')
+                EUterms = dpybind.FastIsing3d(Eimpc, occ, UC, FkoJ, bath)
             else:
                 EUterms[0] += sum(Eimpc * occ)
-                for i,ii in enumerate(bath):
-                    si = (i*2)/len(bath)
-                    for j,jj in enumerate(bath):
-                        sj = (j*2)/len(bath)
-                        dsum = UC[0,ii,jj,jj,ii].real*FkoJ[0]
-                        if (si==sj): dsum -= UC[0,ii,jj,ii,jj].real*FkoJ[0]
-                        for k in range(1,maxk):
-                            dsum += UC[k,ii,jj,jj,ii].real*FkoJ[k]
-                            if (si==sj): dsum -= UC[k,ii,jj,ii,jj].real*FkoJ[k]
-                        EUterms[1] += 0.5*dsum * occ[i]*occ[j]
+                for i, ii in enumerate(bath):
+                    si = int((i * 2) / len(bath))
+                    for j, jj in enumerate(bath):
+                        sj = int((j * 2) / len(bath))
+                        dsum = sum(UC[:, ii, jj, jj, ii].real * FkoJ[:])
+                        if si == sj:
+                            dsum -= sum(UC[:, ii, jj, ii, jj].real * FkoJ[:])
+                        EUterms[1] += 0.5 * dsum * occ[i] * occ[j]
         else:
             if FORTRAN:
-                weave.inline(code5f, ['EUterms','Eimpc','occ','UC','FkoJ','maxk'],type_converters=weave.converters.blitz, compiler = 'gcc')
+                EUterms = dpybind.FastIsing5d(Eimpc, occ, UC, FkoJ)
             else:
                 EUterms[0] += sum(Eimpc * occ)
                 for i in range(len(bath)):
                     for j in range(len(bath)):
-                        dsum = (UC[0,i,j,j,i]-UC[0,i,j,i,j]).real*FkoJ[0]
-                        for k in range(1,maxk):
-                            dsum += (UC[k,i,j,j,i]-UC[k,i,j,i,j]).real*FkoJ[k]
-                        EUterms[1] += 0.5*dsum * occ[i]*occ[j]
+                        dsum = sum(
+                            (UC[:, i, j, j, i] - UC[:, i, j, i, j]).real * FkoJ[:]
+                        )
+                        EUterms[1] += 0.5 * dsum * occ[i] * occ[j]
 
         Ene[js] = EUterms[0] + EUterms[1]
-        print >> fh_info, 'E['+str(js+1)+']=%f ' % Ene[js]
+        print("E[" + str(js + 1) + "]=%f " % Ene[js], file=fh_info)
 
-    print 'Br:', 'Stage1: Computing F^ in direct base'
-    print >> fh_info, 'Stage1: Computing F^ in direct base'
+    print("Br:", "Stage1: Computing F^ in direct base")
+    print("Stage1: Computing F^ in direct base", file=fh_info)
 
-    Fbp=[]
+    Fbp = []
     for js in range(len(sstates)):
-        Fbp.append( [[-1,0.0] for ib in range(len(bath))] )
+        Fbp.append([[-1, 0.0] for ib in range(len(bath))])
 
-    for js,st in enumerate(sstates):
-        Nfinal = sum(Nstates[js])+1
-        if not Nlimits.has_key(Nfinal): continue
+    for js, st in enumerate(sstates):
+        Nfinal = sum(Nstates[js]) + 1
+        if Nfinal not in Nlimits:
+            continue
         (ist_start, ist_end) = Nlimits[Nfinal]
         for ib in range(len(bath)):
             (newst, sig) = op.Fp(st, ib)
-            if newst>0:
+            if newst > 0:
                 ii = sstates.index(newst)
-                Fbp[js][ib] = (ii,float(sig))
+                Fbp[js][ib] = (ii, float(sig))
 
-    #print 'Fbp=', Fbp
-    i0=0
-    while (i0<len(sstates) and (sum(Nstates[i0]) not in Nrange)): i0+=1
-    i1=len(sstates)-1
-    while (i1>=0 and (sum(Nstates[i1]) not in Nrange)): i1-=1;
+    # print 'Fbp=', Fbp
+    i0 = 0
+    while i0 < len(sstates) and (sum(Nstates[i0]) not in Nrange):
+        i0 += 1
+    i1 = len(sstates) - 1
+    while i1 >= 0 and (sum(Nstates[i1]) not in Nrange):
+        i1 -= 1
 
-    fcix = open('actqmc.cix', 'w')
+    fcix = open("actqmc.cix", "w")
     # ---------------------------------------------------------------------------------------
     # -------------- Below is printing for ctqmc  solver ------------------------------------
     # ---------------------------------------------------------------------------------------
-    print >> fcix, '# CIX file for ctqmc! '
-    print >> fcix, '# cluster_size, number of states, number of baths, maximum_matrix_size'
-    print >> fcix, 1, i1-i0+1, len(bath), 1
-    print >> fcix, '# baths, dimension, symmetry'
+    print("# CIX file for ctqmc! ", file=fcix)
+    print(
+        "# cluster_size, number of states, number of baths, maximum_matrix_size",
+        file=fcix,
+    )
+    print(1, i1 - i0 + 1, len(bath), 1, file=fcix)
+    print("# baths, dimension, symmetry", file=fcix)
     for ib in range(len(bath)):
-        print >> fcix, ib, '  ', 1, Sigind[ib,ib]-1, '  ', global_flip[ib]
-    print >> fcix, '# cluster energies for non-equivalent baths, eps[k]'
-    for E in Eimp: print >> fcix, E,
-    print >> fcix
-    print >> fcix, '#     N  K  Sz    size'
-    for i in range(i0,i1+1):
+        print(ib, "  ", 1, Sigind[ib, ib] - 1, "  ", global_flip[ib], file=fcix)
+    print("# cluster energies for non-equivalent baths, eps[k]", file=fcix)
+    # for E in Eimp: print(E, end=' ', file=fcix)
+    print(("{:13.3f} " * len(Eimp)).format(*Eimp), file=fcix)
+    print(file=fcix)
+    print("#     N  K  Sz    size", file=fcix)
+    for i in range(i0, i1 + 1):
         gs = sstates[i]
         if Q3d:
-            Mz = op.Sz(gs)/2.
+            Mz = op.Sz(gs) / 2.0
         else:
             Mz = op.Mz(gs)
-        print >> fcix, "%3d  %2d %2d %6.3f %2d " % (i-i0+1, sum(Nstates[i]), 0, 2*Mz, 1),
+        print(
+            "%3d  %2d %2d %6.3f %2d " % (i - i0 + 1, sum(Nstates[i]), 0, 2 * Mz, 1),
+            end=" ",
+            file=fcix,
+        )
         for ib in range(len(bath)):
-            ifinal,m = Fbp[i][ib]
+            ifinal, m = Fbp[i][ib]
             Nfinal = sum(Nstates[ifinal])
-            if Nfinal not in Nrange: ifinal=-1
-            if ifinal>=0:
-                print >> fcix, "%3d" % (ifinal-i0+1),
+            if Nfinal not in Nrange:
+                ifinal = -1
+            if ifinal >= 0:
+                print("%3d" % (ifinal - i0 + 1), end=" ", file=fcix)
             else:
-                print >> fcix, "%3d" % (0),
-        S2=0.0
-        print >> fcix, "  %12.8f  %3.1f  # %s" % (Ene[i],S2, op.printn(gs))
+                print("%3d" % (0), end=" ", file=fcix)
+        S2 = 0.0
+        print("  %12.8f  %3.1f  # %s" % (Ene[i], S2, op.printn(gs)), file=fcix)
 
-    print >> fcix, '# matrix elements'
-    for i in range(i0,i1+1):
+    print("# matrix elements", file=fcix)
+    for i in range(i0, i1 + 1):
         for ib in range(len(bath)):
-            ifinal,m = Fbp[i][ib]
+            ifinal, m = Fbp[i][ib]
             Nfinal = sum(Nstates[ifinal])
-            if Nfinal not in Nrange: ifinal=-1
-            if ifinal>=0:
-                print >> fcix, "%3d %3d  %2d %2d %f" % (i-i0+1, ifinal-i0+1,1,1,m)
+            if Nfinal not in Nrange:
+                ifinal = -1
+            if ifinal >= 0:
+                print(
+                    "%3d %3d  %2d %2d %f" % (i - i0 + 1, ifinal - i0 + 1, 1, 1, m),
+                    file=fcix,
+                )
             else:
-                print >> fcix, "%3d %3d  %2d %2d" % (i-i0+1, 0, 0, 0)
+                print("%3d %3d  %2d %2d" % (i - i0 + 1, 0, 0, 0), file=fcix)
 
-    if HB2 : print >> fcix, 'HB2'
-    else: print >> fcix, 'HB1'
+    if HB2:
+        print("HB2", file=fcix)
+    else:
+        print("HB1", file=fcix)
 
-
-    if (HB2 and Q3d):
-        ii=0
-        iind={}
-        for i1,bs1 in enumerate(baths):
+    if HB2 and Q3d:
+        ii = 0
+        iind = {}
+        for i1, bs1 in enumerate(baths):
             m1 = bs1[0]
             s1 = bs1[1]
-            if m1 not in bkeep: continue
-            iind[i1]=ii
-            ii+=1
-        print >> fcix, "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]"
-        for i1,bs1 in enumerate(baths):
+            if m1 not in bkeep:
+                continue
+            iind[i1] = ii
+            ii += 1
+        print(
+            "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]", file=fcix
+        )
+        for i1, bs1 in enumerate(baths):
             m1 = bs1[0]
             s1 = bs1[1]
-            if m1 not in bkeep: continue
-            for i2,bs2 in enumerate(baths):
+            if m1 not in bkeep:
+                continue
+            for i2, bs2 in enumerate(baths):
                 m2 = bs2[0]
                 s2 = bs2[1]
-                if m2 not in bkeep: continue
-                for i3,bs3 in enumerate(baths):
+                if m2 not in bkeep:
+                    continue
+                for i3, bs3 in enumerate(baths):
                     m3 = bs3[0]
                     s3 = bs3[1]
-                    if (s2!=s3): continue
-                    if m3 not in bkeep: continue
-                    for i4,bs4 in enumerate(baths):
+                    if s2 != s3:
+                        continue
+                    if m3 not in bkeep:
+                        continue
+                    for i4, bs4 in enumerate(baths):
                         m4 = bs4[0]
                         s4 = bs4[1]
-                        if (s4!=s1): continue
-                        if m4 not in bkeep: continue
+                        if s4 != s1:
+                            continue
+                        if m4 not in bkeep:
+                            continue
                         Uc = 0.0
-                        for k in range(0,l+1):
-                            Uc += real(UC[k,m1,m2,m3,m4])*Fk[k,l]
-                        if abs(Uc)>1e-6:
-                            print >> fcix, "%2d %2d %2d %2d  %12.8f" % (iind[i1],iind[i2],iind[i3],iind[i4],Uc)
+                        for k in range(0, l + 1):
+                            Uc += real(UC[k, m1, m2, m3, m4]) * Fk[k, l]
+                        if abs(Uc) > 1e-6:
+                            print(
+                                "%2d %2d %2d %2d  %12.8f"
+                                % (iind[i1], iind[i2], iind[i3], iind[i4], Uc),
+                                file=fcix,
+                            )
 
-    if (HB2 and not Q3d):
-        print >> fcix, "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]"
+    if HB2 and not Q3d:
+        print(
+            "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]", file=fcix
+        )
         for bs1 in bkeep:
             for bs2 in bkeep:
                 for bs3 in bkeep:
                     for bs4 in bkeep:
                         Uc = 0.0
-                        for k in range(0,l+1):
-                            UC += real(UC[k,bs1,bs2,bs3,bs4])*Fk[k,l]
-                        if abs(Uc)>1e-6:
-                            print >> fcix, "%2d %2d %2d %2d  %12.8f" % (bs1,bs2,bs3,bs4,Uc)
+                        for k in range(0, l + 1):
+                            UC += real(UC[k, bs1, bs2, bs3, bs4]) * Fk[k, l]
+                        if abs(Uc) > 1e-6:
+                            print(
+                                "%2d %2d %2d %2d  %12.8f" % (bs1, bs2, bs3, bs4, Uc),
+                                file=fcix,
+                            )
 
+    print("# number of operators needed", file=fcix)
+    print("1", file=fcix)
+    print("# Occupancy ", file=fcix)
 
-    print >> fcix, '# number of operators needed'
-    print >> fcix, '1'
-    print >> fcix, '# Occupancy '
-
-    bathi=[Sigind[b,b]-1 for b in bath]
-    for i in range(i0,i1+1):
-        nb=0.0
+    bathi = [Sigind[b, b] - 1 for b in bath]
+    for i in range(i0, i1 + 1):
+        nb = 0.0
         nb = zeros(len(set(bathi)))
         for ib in range(len(bath)):
             nb[bathi[ib]] += Nstates[i][ib]
         for ib in range(len(nb)):
-            print >> fcix, "%3d  %2d %2d %f" % (i-i0+1, 1, 1, nb[ib])
+            print("%3d  %2d %2d %f" % (i - i0 + 1, 1, 1, nb[ib]), file=fcix)
 
-    print >> fcix, '# Data for HB1'
+    print("# Data for HB1", file=fcix)
 
-    print >> fcix, 1, len(sstates), len(bath), 1
-    print >> fcix, '#      ind N  K  Jz     size'
+    print(1, len(sstates), len(bath), 1, file=fcix)
+    print("#      ind N  K  Jz     size", file=fcix)
     for i in range(len(sstates)):
         gs = sstates[i]
         if Q3d:
-            Mz = op.Sz(gs)/2.
+            Mz = op.Sz(gs) / 2.0
         else:
             Mz = op.Mz(gs)
-        print >> fcix, "%3d  %3d  %2d %2d %6.3f %2d " % (i+1, inside(i-i0+1,i1+1), sum(Nstates[i]), 0, 2*Mz, 1),
+        print(
+            "%3d  %3d  %2d %2d %6.3f %2d "
+            % (i + 1, inside(i - i0 + 1, i1 + 1), sum(Nstates[i]), 0, 2 * Mz, 1),
+            end=" ",
+            file=fcix,
+        )
         for ib in range(len(bath)):
-            ifinal,m = Fbp[i][ib]
-            print >> fcix, "%3d" % (ifinal+1),
-        print >> fcix, "  ",
-        print >> fcix, "%12.8f  %3.1f  # %s" % (Ene[i], 0, op.printn(gs))
-    print >> fcix, '# matrix elements'
+            ifinal, m = Fbp[i][ib]
+            print("%3d" % (ifinal + 1), end=" ", file=fcix)
+        print("  ", end=" ", file=fcix)
+        print("%12.8f  %3.1f  # %s" % (Ene[i], 0, op.printn(gs)), file=fcix)
+    print("# matrix elements", file=fcix)
     for i in range(len(sstates)):
         for ib in range(len(bath)):
-            ifinal,m = Fbp[i][ib]
-            print >> fcix, "%3d %3d " % (i+1, ifinal+1),
-            if ifinal>=0:
-                print >> fcix, "%2d %2d" % (1,1),  m
+            ifinal, m = Fbp[i][ib]
+            print("%3d %3d " % (i + 1, ifinal + 1), end=" ", file=fcix)
+            if ifinal >= 0:
+                print("%2d %2d" % (1, 1), m, file=fcix)
             else:
-                print >> fcix, "%2d %2d" % (0, 0)
+                print("%2d %2d" % (0, 0), file=fcix)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     """ Help here"""
-
-    n=[1,2,3]  # occupanices used for OCA
-    l=1        # angular momentum
-    J = 0.3    # Hunds coupling
-    qOCA=1     # OCA diagrams are computed
-    Eoca=10.   # Energy window for OCA diagrams
-    mOCA=1e-3  # matrix element for OCA should be greater than that
-    Ncentral=[5] # OCA diagrams are selected such that central occupancy is in Ncentral
-    Ewindow = [-1000,1000]
-    max_M_size=500
-    add_occupancy=True
-    CoulombF = 'Full' #'Bulla_Jarrel' #'Full' # 'Bulla_Jarrel' # 'Full' 'Oles'
-    OCA_G=False
-    PrintReal=True
+    # n=[1,2,3]  # occupanices used for OCA
+    l = 1  # angular momentum
+    J = 0.3  # Hunds coupling
+    # qOCA=1     # OCA diagrams are computed
+    Eoca = 10.0  # Energy window for OCA diagrams
+    # mOCA=1e-3  # matrix element for OCA should be greater than that
+    # Ncentral=[5] # OCA diagrams are selected such that central occupancy is in Ncentral
+    Ewindow = [-1000, 1000]
+    max_M_size = 500
+    add_occupancy = True
+    CoulombF = "Full"  #'Bulla_Jarrel' #'Full' # 'Bulla_Jarrel' # 'Full' 'Oles'
+    # OCA_G=False
+    PrintReal = True
     HB2 = True
     Eimp = [0.0]
     Nmax = 1024
-    para=1
     small = 1e-6
-    small_t2c=1e-5
-    Nrange=[]
-    PrintSminus=False
-    ORB=[] #ORB=[0,0,1,-1,0,0,0,1,-1,0] # [z^2,x^2-y^2,xz,yz,xy,...]
-    OLD_CTQMC=False
+    small_t2c = 1e-5
+    Nrange = []
+    PrintSminus = False
+    ORB = []  # ORB=[0,0,1,-1,0,0,0,1,-1,0] # [z^2,x^2-y^2,xz,yz,xy,...]
+    OLD_CTQMC = False
+
+    # l,J, Ewindow=[-1000,1000], max_M_size=500, ORB=[]
+    # removed: qOCA, mOCA, n, Eoca, OCA_G,
     args = sys.argv[1:]
-    if ('-h' in args) or ('--help' in args):
-        print """Code for generating impurity cix file for a d-type of material
+    if ("-h" in args) or ("--help" in args):
+        print("""Code for generating impurity cix file for a d-type of material
                  The output cix-file can be used for OCA or CTQMC solvers
                  The outputs:
                     out.cix       -- the oca cix file
@@ -1698,562 +1580,621 @@ if __name__ == '__main__':
                     Eimp          -- list of impurity levels (i.e., [0,0,0...] )
                     Sigind        -- The symmetry of the self-energy and impurity levels given as a 2D-list
                     CF            -- The local rotation matrix given as a 2D list or array
-                    n             -- a list of occupancies use in oca output [1,2,3]
                     l             -- angular momentum (l=0, l=1, l=2 supported)
                     J             -- Hund's coupling
-                    qOCA          -- OCA diagrams included if qOCA=1
-                    Eoca          -- OCA diagrams cutof: if any of the atomic states has for Eoca higher energy than the ground state for particular occupancy, the diagram is dropped
-                    mOCA          -- If matrix element is smaller than mOCA, the diagram is dropped
                     Ewindow       -- Energy window for the states kept (used in ctqmc only)
                     max_M_size    -- maximum matrix size kept for ctqmc
-                    Ncentral      -- a list of central occupancies for OCA [1]
-                    OCA_G         -- bool - comput input for OCA as well
-                    para          -- is this paramagnetic or magnetic run
                     ORB           -- index for orbtal susceptibility
-                 """
+                 """)
         sys.exit(0)
-    Q3d=None
+    Q3d = None
     for arg in args:
         if os.path.isfile(arg):
-            execfile(arg)
-            print 'Executed file', arg
+            exec(compile(open(arg, "rb").read(), arg, "exec"))
+            print("Executed file", arg)
         else:
             exec(arg)
 
-    #if CoulombF=='Ising': HB2 = True
-    if CoulombF=='Georges': CoulombF='Ising'
+    if CoulombF == "Georges":
+        CoulombF = "Ising"
 
-    fh_info = open('info_atom_d.dat','w')
-    print >> fh_info, ' '.join(sys.argv)
-    print >> fh_info, 'Eimp=', '[','%f, '*len(Eimp) % tuple(Eimp),']'
-    print >> fh_info, 'n=', n
-    print >> fh_info, 'l=', l
-    print >> fh_info, 'J=', J
-    print >> fh_info, 'qOCA=', qOCA
-    print >> fh_info, 'Eoca=', Eoca
-    print >> fh_info, 'mOCA=', mOCA
-    print >> fh_info, 'Ewindow=', Ewindow
-    print >> fh_info, 'max_M_size=', max_M_size
-    print >> fh_info, 'para=', para
-    print >> fh_info, 'ORB=', ORB
+    fh_info = open("info_atom_d.dat", "w")
+    print(" ".join(sys.argv), file=fh_info)
+    print("Eimp=", "[", "%f, " * len(Eimp) % tuple(Eimp), "]", file=fh_info)
+    # print('n=', n, file=fh_info)
+    print("l=", l, file=fh_info)
+    print("J=", J, file=fh_info)
+    # print('qOCA=', qOCA, file=fh_info)
+    # print('Eoca=', Eoca, file=fh_info)
+    # print('mOCA=', mOCA, file=fh_info)
+    print("Ewindow=", Ewindow, file=fh_info)
+    print("max_M_size=", max_M_size, file=fh_info)
+    # print('para=', para, file=fh_info)
+    print("ORB=", ORB, file=fh_info)
 
-    ftrans='Trans.dat'
-    if (len(glob.glob(ftrans))!=0):
-        print >> fh_info, 'Reading file', ftrans
+    Nls = int(2 * l + 1)
+
+    ftrans = "Trans.dat"
+    # if (len(glob.glob(ftrans))!=0):
+    if os.path.exists(ftrans):
+        print("Reading file", ftrans, file=fh_info)
         (Sigind, CF) = ReadTrans(ftrans, fh_info)
+        if len(Sigind) == Nls:
+            dn = Nls
+            SigindN = zeros((2 * dn, 2 * dn), dtype=int)
+            SigindN[:dn, :dn] = Sigind
+            SigindN[dn:, dn:] = Sigind
+            Sigind = SigindN
 
-        if len(Sigind)==(2*l+1):
-            dn = 2*l+1
-            SigindN = zeros((2*dn, 2*dn), dtype=int)
-            SigindN[:dn,:dn] = Sigind
-            SigindN[dn:,dn:] = Sigind
-            Sigind=SigindN
-
-        if (len(Sigind)!= 2*(2*l+1)):
-            print 'ERROR: Sigind from file', ftrans, 'does not have correct dimension!'
+        if len(Sigind) != int(2 * (2 * l + 1)):
+            print("ERROR: Sigind from file", ftrans, "does not have correct dimension!")
             sys.exit(1)
 
-        if len(CF)==2*l+1:
-            if Q3d==None: Q3d=True # this must be 3d orbital
-        elif len(CF)==2*(2*l+1):
-            dn=2*l+1
-            off_diag = CF[dn:,:dn]
+        if len(CF) == Nls:
+            if Q3d == None:
+                Q3d = True  # this must be 3d orbital
+        elif len(CF) == 2 * Nls:
+            dn = Nls
+            off_diag = CF[dn:, :dn]
             off = sum(sum(abs(off_diag)))
-            print off
-            if Q3d==None:
-                if off>1e-5:
-                    Q3d=False
+            print(off)
+            if Q3d == None:
+                if off > 1e-5:
+                    Q3d = False
                 else:
-                    Q3d=True
+                    Q3d = True
         else:
-            print 'ERROR: Transformation CF=T2C does not have correct dimension'
+            print("ERROR: Transformation CF=T2C does not have correct dimension")
             sys.exit(1)
 
         # If any diagonal entry in Sigind[] is equal to zero, we want to project it out.
         # This is achieved by making impurity levels Eimp very large for this orbital
-        Sigind_orig=copy.copy(Sigind)
-        Simax = max(map(max,Sigind))
+        Sigind_orig = copy.copy(Sigind)
+        Simax = max(list(map(max, Sigind)))
         for i in range(len(Sigind)):
-            if Sigind[i,i]==0:
-                Sigind[i,i]=Simax+1
-                if len(Eimp)<=Simax : Eimp += [2000.]
-
+            if Sigind[i, i] == 0:
+                Sigind[i, i] = Simax + 1
+                if len(Eimp) <= Simax:
+                    Eimp += [2000.0]
 
         # Matrix contained in Trans.dat should be T(i,m):
         #   - i runs over real harmonics (z^2, x^2-y^2, yz, xz, xy)
         #   - m runs over complex harmonics (-2, -1, 0, 1, 2)
         # The matrix in Trans.dat, read into CF, is the transpose of
         # what we want in T2C, hence the T2C = transpose(CF) statement
+        # Nls = int(2*l+1)
         if Q3d:
             ##### change 2013
-            T2C = transpose(CF[:(2*l+1),:(2*l+1)])
+            T2C = transpose(CF[:Nls, :Nls])
             Check_T2C_Real(T2C, l, fh_info, small_t2c)
         else:
-            #CFN = zeros(shape(CF),dtype=complex)
-            #CFN[:,:(2*l+1)] = CF[:,(2*l+1):]
-            #CFN[:,(2*l+1):] = CF[:,:(2*l+1)]
+            # CFN = zeros(shape(CF),dtype=complex)
+            # CFN[:,:(2*l+1)] = CF[:,(2*l+1):]
+            # CFN[:,(2*l+1):] = CF[:,:(2*l+1)]
             CFN = CF
             T2C = transpose(CFN)
         ##### change 2013, you will need to generalize this
-
     else:
         """
         Cubic harmonics have the order compatible with the Wien2K package:
         z^2, x^2-y^2, yz, zx, xy
         """
-        print ftrans, 'file not found; generating Sigind & complex-to-real spherical harmonics transformation inside atom_d.'
-        T2C = TS2C(l)
-        if Q3d==None: Q3d=True
-
-        Sigind = zeros((2*(2*l+1),2*(2*l+1)), dtype=int)
+        print(
+            ftrans,
+            "file not found; generating Sigind & complex-to-real spherical harmonics transformation inside atom_d.",
+        )
+        T2C = transpose(Spheric2Cubic(l))
+        if Q3d == None:
+            Q3d = True
+        # Nls = int(2*l+1)
+        Sigind = zeros((2 * Nls, 2 * Nls), dtype=int)
         if Q3d:
-            for i in range(2*l+1):
-                Sigind[i,i] = i+1
-                Sigind[i+(2*l+1),i+(2*l+1)] = i+1
+            for i in range(Nls):
+                Sigind[i, i] = i + 1
+                Sigind[i + Nls, i + Nls] = i + 1
         else:
-            zr = zeros(2*l+1)
+            zr = zeros(Nls)
             CF = transpose(T2C)
-            CFn=[]
-            for i in range(2*l+1):
-                CFn.append( CF[i].tolist()+zr.tolist()  )
-                CFn.append( zr.tolist()+CF[i].tolist()  )
-                Sigind[2*i,2*i] = i+1
-                Sigind[2*i+1,2*i+1] = i+1
+            CFn = []
+            for i in range(Nls):
+                CFn.append(CF[i].tolist() + zr.tolist())
+                CFn.append(zr.tolist() + CF[i].tolist())
+                Sigind[2 * i, 2 * i] = i + 1
+                Sigind[2 * i + 1, 2 * i + 1] = i + 1
             CFn = array(CFn)
             T2C = transpose(CFn)
 
     if Q3d:
-        global_flip = range(2*l+1) + range(2*l+1)
+        global_flip = list(range(Nls)) + list(range(Nls))
     else:
-        global_flip=[]
-        for i in range(2*l+1):
-            global_flip += [i,i]
+        global_flip = []
+        for i in range(Nls):
+            global_flip += [i, i]
 
-    print >> fh_info, 'Sigind=', Sigind
+    print("Sigind=", Sigind, file=fh_info)
 
-    print >> fh_info, 'T2C='
+    print("T2C=", file=fh_info)
     for i in range(len(T2C)):
         for j in range(len(T2C)):
-            print >> fh_info, "%6.3f %6.3f   " % (T2C[i,j].real, T2C[i,j].imag),
-        print >> fh_info
+            print(
+                "%6.3f %6.3f   " % (T2C[i, j].real, T2C[i, j].imag),
+                end=" ",
+                file=fh_info,
+            )
+        print(file=fh_info)
 
-    print >> fh_info, 'global_flip=', global_flip
+    print("global_flip=", global_flip, file=fh_info)
 
-    print >> fh_info, 'Impurity level structure Sigind is:'
-    print >> fh_info, Sigind
+    print("Impurity level structure Sigind is:", file=fh_info)
+    print(Sigind, file=fh_info)
 
-    print >> fh_info, 'T2C^T follows:'
-    print >> fh_info, '\n'.join('   '.join('%10f %10f' % (x.real, x.imag) for x in row) for row in T2C.transpose())
-    print >> fh_info, 'shape(T2C)=', shape(T2C)
-    print >> fh_info, 'T2C is Unitary=', sum(abs(matrix(T2C) * matrix(T2C).H - identity(len(T2C))))
+    print("T2C^T follows:", file=fh_info)
+    print(
+        "\n".join(
+            "   ".join("%10f %10f" % (x.real, x.imag) for x in row)
+            for row in T2C.transpose()
+        ),
+        file=fh_info,
+    )
+    print("shape(T2C)=", shape(T2C), file=fh_info)
+    print(
+        "T2C is Unitary=",
+        sum(abs(matrix(T2C) * matrix(T2C).H - identity(len(T2C)))),
+        file=fh_info,
+    )
 
-    Nitt=1  # To figure out the symmetry, we itterate Nitt times
+    Nitt = 1  # To figure out the symmetry, we itterate Nitt times
 
     Jc = J
-    cx = 0. # No spin orbit at the moment
+    cx = 0.0  # No spin orbit at the moment
 
     # Ratio between F2,F4,F6 and J! At the end of the day, we want to use U and J only!
-    #Fk = gaunt.slaterf(1., Jc)
-    U0=1.
+    # Fk = gaunt.slaterf(1., Jc)
+    U0 = 1.0
     Fk = SlaterF(U0, Jc, l)
-    print >> fh_info, 'Slater integrals F^k are ', Fk[:,l]
-
+    print("Slater integrals F^k are ", Fk[:, int(l)], file=fh_info)
 
     # one electron base
-    baths=[]
-    for s in [1,-1]:
-        for b in range(2*l+1):
-            baths.append([b,s])
-    bathi=[Sigind[b,b]-1 for b in range(len(Sigind))]
+    baths = []
+    for s in [1, -1]:
+        for b in range(Nls):
+            baths.append([b, s])
+    bathi = [Sigind[b, b] - 1 for b in range(len(Sigind))]
 
-    dkbth={}
+    dkbth = {}
     for i in range(len(bathi)):
-        if dkbth.has_key(bathi[i]):
+        if bathi[i] in dkbth:
             dkbth[bathi[i]].append(i)
         else:
-            dkbth[bathi[i]]=[i]
-    kbth=[]
-    for k in sort(dkbth.keys()):
+            dkbth[bathi[i]] = [i]
+    kbth = []
+    for k in sort(list(dkbth.keys())):
         kbth.append(dkbth[k])
 
-    kbth0=[]
-    for i in range(len(baths)): kbth0.append([i])
+    kbth0 = []
+    for i in range(len(baths)):
+        kbth0.append([i])
 
-
-    #print max(bathi)
-    if max(bathi)>=len(Eimp):
-        print 'You specified wrong dimension for Eimp! Boiling out.... Need at least '+str(max(bathi)+1)+' components'
+    # print max(bathi)
+    if max(bathi) >= len(Eimp):
+        print(
+            "You specified wrong dimension for Eimp! Boiling out.... Need at least "
+            + str(max(bathi) + 1)
+            + " components"
+        )
         sys.exit(1)
 
-    bkeep=[]
+    bkeep = []
     for b in range(len(bathi)):
-        if Eimp[bathi[b]]<1000:  bkeep.append(b)
+        if Eimp[bathi[b]] < 1000:
+            bkeep.append(b)
 
-    tEimp = filter(lambda x: x<1000,Eimp)
-    tkbth=[]
+    tEimp = [x for x in Eimp if x < 1000]
+    tkbth = []
     for k in kbth:
-        if k[0] in bkeep: tkbth.append(k)
+        if k[0] in bkeep:
+            tkbth.append(k)
 
+    print("Some other info in ED:", file=fh_info)
+    print("bathi=", bathi, file=fh_info)
+    print("kbth=", kbth, file=fh_info)
+    print("tkbth=", tkbth, file=fh_info)
+    print("Eimp=", Eimp, file=fh_info)
+    print("tEimp=", tEimp, file=fh_info)
+    print("bkeep=", bkeep, file=fh_info)
 
+    Ntot = 2 ** (len(baths))  # size of the direct base
 
-    print >> fh_info, 'Some other info in ED:'
-    print >> fh_info, 'bathi=', bathi
-    print >> fh_info, 'kbth=', kbth
-    print >> fh_info, 'tkbth=', tkbth
-    print >> fh_info, 'Eimp=', Eimp
-    print >> fh_info, 'tEimp=', tEimp
-    print >> fh_info, 'bkeep=', bkeep
-
-    Ntot = 2**(len(baths)) # size of the direct base
-
-    op = operateLS(2*(2*l+1), T2C, Q3d) # operators class
+    op = operateLS(2 * Nls, T2C, Q3d)  # operators class
 
     if op.Q3d:
-        print >> fh_info, 'baths bi=', op.bi
-        print >> fh_info, 'spin Sz=', op.sz
-        print >> fh_info, 'mask-down=', op.mask_d
-        print >> fh_info, 'mask-up  =', op.mask_u
+        print("baths bi=", op.bi, file=fh_info)
+        print("spin Sz=", op.sz, file=fh_info)
+        print("mask-down=", op.mask_d, file=fh_info)
+        print("mask-up  =", op.mask_u, file=fh_info)
 
-    SO = SpinOrbitM(l,T2C) # Spin orbit matrix
+    SO = SpinOrbitM(l, T2C)  # Spin orbit matrix
 
-    # These are possible values for CoulombF:
-    #   'Ising'  : density-density interaction of Slater type
-    #   'Full'   : Fully rotationally invariant interaction of Slater type, but with SU(N) symmetry [like in Kanamori]
-    #   'FullS'  : Fully rotationally invariant interaction of Slater type, but with SU(3) symmetry [usual Slater interaction]
-    #   'FullK'  : Kanamori type interaction, but U and J are computed so that within t2g block the interaction has the same form as Slater interaction
-    if CoulombF in ['Full','Ising','FullS', 'IsingS']:      # Slater parametrization
-        UC = CoulUsC2(l,T2C)              # Coulomb repulsion matrix
-        Ucn = zeros(shape(UC),dtype=complex)
-        if CoulombF in ['Full', 'IsingS']:  # We keep matrix elements which give no sign problem
-            for i in range(2*l+1):
-                for j in range(2*l+1):
-                    Ucn[0,i,j,j,i] = 1.0
-                    Ucn[1,i,j,j,i] = UC[1,i,j,j,i]
-                    Ucn[2,i,j,j,i] = UC[2,i,j,j,i]
-                    if i!=j:
-                        Ucn[1,i,j,i,j] = UC[1,i,j,i,j]
-                        Ucn[1,i,i,j,j] = UC[1,i,i,j,j]
-                        Ucn[2,i,j,i,j] = UC[2,i,j,i,j]
-                        Ucn[2,i,i,j,j] = UC[2,i,i,j,j]
-            UC = Ucn
-    elif CoulombF in ['FullK','IsingK']:  # Kanamori parametrization
-        UC = zeros((l+1, 2*l+1, 2*l+1, 2*l+1, 2*l+1), dtype=complex)
-        for i in range(5):
-            for j in range(5):
-                if i==j:
-                    UC[0,i,j,j,i]=1.
-                    UC[1,i,j,j,i]=4./49.
-                    UC[2,i,j,j,i]=4./49.
-                else:
-                    UC[0,i,j,j,i]=1.      # F0
-                    UC[1,i,j,j,i]=-2./49. # F2 exact for t2g's
-                    UC[2,i,j,j,i]=-4./441.# F4 exact for t2g's
-                    UC[1,i,j,i,j]= 3./49. # F2 exact for t2g's
-                    UC[2,i,j,i,j]=20./441.# F4 exact for t2g's
-                    UC[1,i,i,j,j]= 3./49. # F2 exact for t2g's
-                    UC[2,i,i,j,j]=20./441.# F4 exact for t2g's
+    U_set_from_file = False
+    if os.path.isfile("Uc.dat") and os.path.getsize("Uc.dat") > 0:
+        UC = zeros((int(l + 1), Nls, Nls, Nls, Nls), dtype=complex)
+        print("Coulomb repulsion read from file Uc.dat", file=fh_info)
+        fUc = loadtxt("Uc.dat")
+        arr_ii = fUc[:, :4].astype(int)  # shape (N, 4)
+        arr_val = fUc[:, 4]  # shape (N,)
+
+        U0_average = 0
+        how_many = 0
+        for i in range(len(fUc)):
+            ii = arr_ii[i]
+            if ii[0] == ii[3] and ii[1] == ii[2]:
+                U0_average += arr_val[i]
+                ik = 0
+                how_many += 1
+            else:
+                ik = 1
+            UC[ik, ii[0], ii[1], ii[2], ii[3]] = arr_val[i]
+        U0_average *= 1 / how_many
+        Fk[: int(l + 1), int(l)] = 1.0
+        # subtracting U0, which should be given through params.dat
+        for i in range(Nls):
+            for j in range(Nls):
+                UC[0, i, j, j, i] -= U0_average
+
+        U_set_from_file = True
     else:
-        print 'ERROR: CoulombF form ', CoulombF, ' not yet implemented!'
-        sys.exit(0)
+        # These are possible values for CoulombF:
+        #   'Ising'  : density-density interaction of Slater type
+        #   'Full'   : Fully rotationally invariant interaction of Slater type, but with SU(N) symmetry [like in Kanamori]
+        #   'FullS'  : Fully rotationally invariant interaction of Slater type, but with SU(3) symmetry [usual Slater interaction]
+        #   'FullK'  : Kanamori type interaction, but U and J are computed so that within t2g block the interaction has the same form as Slater interaction
+        if CoulombF in ["Full", "Ising", "FullS", "IsingS"]:  # Slater parametrization
+            UC = CoulUsC2(l, T2C)  # Coulomb repulsion matrix
+            Ucn = zeros(shape(UC), dtype=complex)
+            n0 = shape(Ucn)[0]
+            if CoulombF in [
+                "Full",
+                "IsingS",
+            ]:  # We keep matrix elements which give no sign problem
+                for i in range(Nls):
+                    for j in range(Nls):
+                        Ucn[0, i, j, j, i] = 1.0
+                        Ucn[1, i, j, j, i] = UC[1, i, j, j, i]
+                        if n0 > 2:
+                            Ucn[2, i, j, j, i] = UC[2, i, j, j, i]
+                        if i != j:
+                            Ucn[1, i, j, i, j] = UC[1, i, j, i, j]
+                            Ucn[1, i, i, j, j] = UC[1, i, i, j, j]
+                            if n0 > 2:
+                                Ucn[2, i, j, i, j] = UC[2, i, j, i, j]
+                                Ucn[2, i, i, j, j] = UC[2, i, i, j, j]
+                UC = Ucn
+        elif CoulombF in ["FullK", "IsingK"]:  # Kanamori parametrization
+            UC = zeros((l + 1, Nls, Nls, Nls, Nls), dtype=complex)
+            for i in range(Nls):
+                for j in range(Nls):
+                    if i == j:
+                        UC[0, i, j, j, i] = 1.0
+                        UC[1, i, j, j, i] = 4.0 / 49.0
+                        UC[2, i, j, j, i] = 4.0 / 49.0
+                    else:
+                        UC[0, i, j, j, i] = 1.0  # F0
+                        UC[1, i, j, j, i] = -2.0 / 49.0  # F2 exact for t2g's
+                        UC[2, i, j, j, i] = -4.0 / 441.0  # F4 exact for t2g's
+                        UC[1, i, j, i, j] = 3.0 / 49.0  # F2 exact for t2g's
+                        UC[2, i, j, i, j] = 20.0 / 441.0  # F4 exact for t2g's
+                        UC[1, i, i, j, j] = 3.0 / 49.0  # F2 exact for t2g's
+                        UC[2, i, i, j, j] = 20.0 / 441.0  # F4 exact for t2g's
+        else:
+            print("ERROR: CoulombF form ", CoulombF, " not yet implemented!")
+            sys.exit(0)
 
-    if os.path.isfile('../Uc.dat') and os.path.getsize('../Uc.dat')>0:
-        Uc = loadtxt('../Uc.dat')
-        for m1 in range(5):
-            for m2 in range(5):
-                UC[0,m1,m2,m2,m1] = Uc[m1,m2]
-                #if abs(UC[0,m1,m2,m2,m1])>1e-3:
-                #    print "%2d %2d %2d %2d  %5.2f " % (m1, m2, m2, m1, UC[0,m1,m2,m2,m1])
-    else:
-        UC[0,:,:,:,:]=0.0
+        # We will add F0 later through params.dat in the impurity solver
+        UC[0, :, :, :, :] = 0.0
+
+    # if os.path.isfile('../Uc.dat') and os.path.getsize('../Uc.dat')>0:
+    #    Uc = loadtxt('../Uc.dat')
+    #    print('Coulomb repulsion read from file Uc.dat', file=fh_info)
+    #    for m1 in range(Nls):
+    #        for m2 in range(Nls):
+    #            UC[0,m1,m2,m2,m1] = Uc[m1,m2]
+    #            #if abs(UC[0,m1,m2,m2,m1])>1e-3:
+    #            #    print "%2d %2d %2d %2d  %5.2f " % (m1, m2, m2, m1, UC[0,m1,m2,m2,m1])
+    # else:
+
+    # for m1 in range(Nls):
+    #    for m2 in range(Nls):
+    #        for m3 in range(Nls):
+    #            for m4 in range(Nls):
+    #                if sum(UC[:,m1,m2,m3,m4])!=0:
+    #                    print(m1,m2,m3,m4,UC[:,m1,m2,m3,m4])
 
     if Q3d:
-        nw=2*l+1
+        nw = Nls
     else:
-        nw=2*(2*l+1)
+        nw = 2 * Nls
 
-    #if (HB2):
-    #    # New for self-energy sampling
-    #    UHa=zeros((nw,nw,nw))
-    #    UFo=zeros((nw,nw,nw))
-    #    for m1 in range(nw):
-    #        for m2 in range(nw):
-    #            for m3 in range(nw):
-    #                for k in range(0,l+1):
-    #                    UHa[m1,m2,m3] += real(UC[k,m1,m2,m3,m1])*Fk[k,l]
-    #                    UFo[m1,m2,m3] += real(UC[k,m1,m2,m1,m3])*Fk[k,l]
-    UHa=zeros((nw,nw,nw))
-    UFo=zeros((nw,nw,nw))
+    # DMFTwDFT addition: keep writing UC.dat for the static self-energy path.
+    UHa = zeros((nw, nw, nw))
+    UFo = zeros((nw, nw, nw))
     for m1 in range(nw):
         for m2 in range(nw):
             for m3 in range(nw):
-                for k in range(0,l+1):
-                    UHa[m1,m2,m3] += real(UC[k,m1,m2,m3,m1])*Fk[k,l]
-                    UFo[m1,m2,m3] += real(UC[k,m1,m2,m1,m3])*Fk[k,l]
-    fi=open('UC.dat','w')
-    for bs1 in baths:
-        for bs2 in baths:
-            for bs3 in baths:
-                m1 = bs1[0]
-                s1 = bs1[1]
-                m2 = bs2[0]
-                s2 = bs2[1]
-                m3 = bs3[0]
-                s3 = bs3[1]
-                Uc = 0.0
-                #if s2==s3:
-                if s2==s3 and m2==m3:
-                    if s1==s2: Uc = UHa[m1,m2,m3]-UFo[m1,m2,m3] # Equal spins: Hartree and Fock
-                    else: Uc = UHa[m1,m2,m3], # Opposite spins: Hartree Only
-                    print >>fi, "%12.8f" % Uc,
-        print >>fi
-    fi.close()
+                for k in range(int(l + 1)):
+                    UHa[m1, m2, m3] += real(UC[k, m1, m2, m3, m1]) * Fk[k, int(l)]
+                    UFo[m1, m2, m3] += real(UC[k, m1, m2, m1, m3]) * Fk[k, int(l)]
+
+    with open("UC.dat", "w") as fi:
+        for bs1 in baths:
+            row = []
+            for bs2 in baths:
+                for bs3 in baths:
+                    m1 = bs1[0]
+                    s1 = bs1[1]
+                    m2 = bs2[0]
+                    s2 = bs2[1]
+                    m3 = bs3[0]
+                    s3 = bs3[1]
+                    if s2 == s3 and m2 == m3:
+                        if s1 == s2:
+                            Uc = UHa[m1, m2, m3] - UFo[m1, m2, m3]
+                        else:
+                            Uc = UHa[m1, m2, m3]
+                        row.append(f"{Uc:12.8f}")
+            print(" ".join(row), file=fi)
 
     if Nrange:
         FastIsing(Nrange)
         sys.exit(0)
     else:
-        Nrange = range((2*l+1)*2+1)
+        Nrange = list(range(Nls * 2 + 1))
 
     # some properties of integers which will serve a direct base - partial occupancy and Sz
-    prop=[]
+    prop = []
     for i in range(Ntot):
         #### 2013 ### all these are wrong for 5d
         occ = op.occup(i)
-        prop.append([sum(occ), op.Sz(i),occ])
+        prop.append([sum(occ), op.Sz(i), occ])
     # creates direct base from integers having correct properties
     # wstates contains [N, Sz, [all direct states with this N and Sz]]
 
-    if not Nrange: Nrange = range((2*l+1)*2+1)
-    wstates = baseN(Nrange,prop,op.Q3d)
+    if not Nrange:
+        Nrange = list(range(Nls * 2 + 1))
+    wstates = baseN(Nrange, prop, op.Q3d)
 
-    indx={}
-    for ni,ns in enumerate(wstates):
-        indx[(ns[0],ns[1])] = ni  # index according to N and Sz of the state
+    indx = {}
+    for ni, ns in enumerate(wstates):
+        indx[(ns[0], ns[1])] = ni  # index according to N and Sz of the state
 
-    print >> fh_info, 'indx='
-    print >> fh_info, indx
-    kindx = indx.keys()
+    print("indx=", file=fh_info)
+    print(indx, file=fh_info)
+    kindx = list(indx.keys())
 
-    print >> fh_info, 'Stage0: Exact diagonalization of the atom'
+    print("Stage0: Exact diagonalization of the atom", file=fh_info)
 
-    mxs = max(map(max,Sigind))
-    if len(Eimp)<mxs:
-        print 'ERROR: The dimension of the Eimp should be equal to the maximum index of Sigind->',mxs
+    mxs = max(list(map(max, Sigind)))
+    if len(Eimp) < mxs:
+        print(
+            "ERROR: The dimension of the Eimp should be equal to the maximum index of Sigind->",
+            mxs,
+        )
         sys.exit(1)
 
-    Eimpc = zeros((2*(2*l+1), 2*(2*l+1)), dtype=complex)
+    Eimpc = zeros((2 * Nls, 2 * Nls), dtype=complex)
     for ic in range(len(Sigind)):
-        Eimpc[ic,ic] = Eimp[Sigind[ic,ic]-1]
+        Eimpc[ic, ic] = Eimp[Sigind[ic, ic] - 1]
 
-    print >> fh_info, 'impurity levels Eimpc0='
+    print("impurity levels Eimpc0=", file=fh_info)
     mprint(fh_info, real(Eimpc))
-    #Eimpc = matrix(T2C) * matrix(Eimpc) * matrix(T2C).H
-    #print 'Eimpc1='
-    #mprint(Eimpc)
+    # Eimpc = matrix(T2C) * matrix(Eimpc) * matrix(T2C).H
+    # print 'Eimpc1='
+    # mprint(Eimpc)
 
-
-    Ene=[] # Energy
-    Te=[]  # eigenvectors
-    S2w=[] # Spin
+    Ene = []  # Energy
+    Te = []  # eigenvectors
+    S2w = []  # Spin
     #### NEW
     if PrintSminus:
-        Si_minus={}
-        Sm_minus={}
+        Si_minus = {}
+        Sm_minus = {}
     #### NEW
-    for ni,ns in enumerate(wstates):
+    for ni, ns in enumerate(wstates):
+        # print 'Br:', 'n=', ns[0], 'sz=', ns[1]/2.
 
-        #print 'Br:', 'n=', ns[0], 'sz=', ns[1]/2.
-
-        print >> fh_info, '----------------------------------------------------'
-        print >> fh_info, 'n=', ns[0], 'sz=', ns[1]/2.
+        print("----------------------------------------------------", file=fh_info)
+        print("n=", ns[0], "sz=", ns[1] / 2.0, file=fh_info)
         states = ns[2]
         # printing all states in this sector
-        print >> fh_info, 'states=',
-        for ist,st in enumerate(states): print >> fh_info, ('%d:'%ist),op.printn(st),
-        print >> fh_info
+        print("states=", end=" ", file=fh_info)
+        for ist, st in enumerate(states):
+            print(("%d:" % ist), op.printn(st), end=" ", file=fh_info)
+        print(file=fh_info)
 
-        S2 = zeros((len(states),len(states)),dtype=complex)
-        if CoulombF[:4] == 'Full' and op.Q3d:
+        S2 = zeros((len(states), len(states)), dtype=complex)
+        if CoulombF[:4] == "Full" and op.Q3d:
             # Computes matrix of S^2
-            for js,st in enumerate(states):
-                #print st, op.printn(st), "    ",
+            for js, st in enumerate(states):
+                # print st, op.printn(st), "    ",
                 stn = op.S2(st)
-                #print stn
+                # print stn
                 for ps in stn:
                     ii = ps[0]
                     iu = states.index(ii)
-                    S2[js,iu] += ps[1]
+                    S2[js, iu] += ps[1]
         ##### NEW
         if PrintSminus:
-            j_minus=-1
+            j_minus = -1
             for j in range(len(wstates)):
-                if (wstates[j][0]==ns[0] and wstates[j][1]==ns[1]-2):
+                if wstates[j][0] == ns[0] and wstates[j][1] == ns[1] - 2:
                     j_minus = j
                     break
-            if j_minus>=0:
+            if j_minus >= 0:
                 n_new = len(wstates[j_minus][2])
-                S_minus = zeros((len(states),n_new),dtype=complex)
-                #print 'n=', ns[0], 'sz=', ns[1]/2., 'j_minus=', j_minus, 'n=', wstates[j_minus][0], 'sz=', wstates[j_minus][1]/2., 'states=', wstates[j_minus][2]
-                for js,st in enumerate(states):
+                S_minus = zeros((len(states), n_new), dtype=complex)
+                # print 'n=', ns[0], 'sz=', ns[1]/2., 'j_minus=', j_minus, 'n=', wstates[j_minus][0], 'sz=', wstates[j_minus][1]/2., 'states=', wstates[j_minus][2]
+                for js, st in enumerate(states):
                     stn = op.S_minus(st)
-                    #print 'stn=', stn
+                    # print 'stn=', stn
                     for ps in stn:
                         ii = ps[0]
                         states_plus = wstates[j_minus][2]
                         iu = states_plus.index(ii)
-                        S_minus[js,iu] += ps[1]
+                        S_minus[js, iu] += ps[1]
         ###### NEW
 
+        Ham = zeros((len(states), len(states)), dtype=complex)
 
-        Ham = zeros((len(states),len(states)),dtype=complex)
-
-        for js,st in enumerate(states):
+        for js, st in enumerate(states):
             # on-site Energies in base of cubic harmonics
             # contain crystal-field splittings
             DM = op.DM(st)
             for i in range(len(Eimpc)):
                 for j in range(len(Eimpc)):
-                    if abs(Eimpc[i,j])<1e-5:continue
+                    if abs(Eimpc[i, j]) < 1e-5:
+                        continue
                     for p in DM[i][j]:
                         iu = states.index(p[0])
-                        Ham[js,iu] += p[1]*Eimpc[i,j]
+                        Ham[js, iu] += p[1] * Eimpc[i, j]
 
-            if CoulombF[:4] == 'Full':
+            if CoulombF[:4] == "Full":
                 ## Coulomb interaction including F2 and F4
-                cst = op.CoulombU(st, UC, Fk[:,l])
+                cst = op.CoulombU(st, UC, Fk[:, int(l)])
                 for cs in cst:
                     ii = cs[0]
                     U0 = cs[1][0]
                     U1 = cs[1][1]
                     iu = states.index(ii)
-                    Ham[js,iu] +=  0.5*U1 # adding only F2,F4,... but not F0
-                    Ham[js,iu] +=  0.5*U0 # adding only F2,F4,... but not F0
-
-            elif CoulombF[:5] == 'Ising':
+                    Ham[js, iu] += 0.5 * U1  # adding only F2,F4,... but not F0
+                    Ham[js, iu] += 0.5 * U0  # adding only F2,F4,... but not F0
+                    # print('Adding Ham['+str(js)+','+str(iu)+']=',0.5*(U0+U1))
+            elif CoulombF[:5] == "Ising":
                 ## Coulomb interaction including F2 and F4
-                cst = op.CoulombUIsing(st, UC, Fk[:,l])
+                cst = op.CoulombUIsing(st, UC, Fk[:, l])
                 for cs in cst:
                     ii = cs[0]
                     U0 = cs[1][0]
                     U1 = cs[1][1]
-                    #iu = states.index(ii)
-                    #if (iu!=js): print 'ERROR', iu, js, 'iu==js', iu==js
+                    # iu = states.index(ii)
+                    # if (iu!=js): print 'ERROR', iu, js, 'iu==js', iu==js
 
-                    Ham[js,js] +=  0.5*U1 # adding only F2,F4,... but not F0
-                    Ham[js,js] +=  0.5*U0 # adding only F2,F4,... but not F0
+                    Ham[js, js] += 0.5 * U1  # adding only F2,F4,... but not F0
+                    Ham[js, js] += 0.5 * U0  # adding only F2,F4,... but not F0
 
             else:
-                print 'Not yet implemented 2!'
+                print("Not yet implemented 2!")
                 sys.exit(1)
 
             # Spin-orbit interaction
-            if cx>1e-5:
+            if cx > 1e-5:
                 cst = op.OneBodyNab(st, SO)
                 for cs in cst:
                     iu = states.index(cs[0])
-                    #if (js>=len(states) or iu>=len(states)): print 'Tezave!'
-                    Ham[js,iu] += cs[1]*cx
+                    # if (js>=len(states) or iu>=len(states)): print 'Tezave!'
+                    Ham[js, iu] += cs[1] * cx
 
-        #if (cx>1e-5): cprint(Ham)
-        #else:
-        #print >> fh_info, 'H='
-        #mprint(fh_info, Ham)
+        # if (cx>1e-5): cprint(Ham)
+        # else:
+        # print >> fh_info, 'H='
+        # print('H=', file=fh_info)
+        # mprint(fh_info, Ham)
 
-        if CoulombF[:4] == 'Full':
+        if CoulombF[:4] == "Full":
             eig = Diagonalize(Ham, small, fh_info)  # Block diagonalization is better!!
             Ex = eig[0]
             Tx = eig[1]
-            Ene.append( Ex )
-            Te.append( Tx )
+            Ene.append(Ex)
+            Te.append(Tx)
         else:
-            Ex = [real(Ham[i,i]) for i in range(len(Ham))]
-            Tx = eye(len(Ham),len(Ham))
-            Ene.append( Ex )
-            Te.append( Tx )
+            Ex = [real(Ham[i, i]) for i in range(len(Ham))]
+            Tx = eye(len(Ham), len(Ham))
+            Ene.append(Ex)
+            Te.append(Tx)
 
-
-        if CoulombF[:4]=='Full' and op.Q3d:
+        if CoulombF[:4] == "Full" and op.Q3d:
             # Here we compute matrix of S^2 in eigenbase. Should be diagonal if no spin-orbit coupling
-            S2e = matrix(conj(Tx.transpose())) * S2 * matrix(Tx)
+            # S2e = matrix(conj(Tx.transpose())) * S2 * matrix(Tx)
+            S2e = Tx.T.conj() @ S2 @ Tx
+            printS = False
+            trouble = []
+            if l % 1 == 0:
+                for i0 in range(shape(S2e)[0]):
+                    for i1 in range(shape(S2e)[1]):
+                        if i0 != i1 and abs(S2e[i0, i1]) > 1e-6:
+                            print("WARNING: Troubles->", i0, i1, S2e[i0, i1])
+                            printS = True
+                            trouble.append(i0)
 
-            printS=False
-            trouble=[]
-            for i0 in range(shape(S2e)[0]):
-                for i1 in range(shape(S2e)[1]):
-                    if i0!=i1 and abs(S2e[i0,i1])>1e-6 :
-                        print 'WARNING: Troubles->', i0, i1, S2e[i0,i1]
-                        printS=True
-                        trouble.append(i0)
-
-            printS=False # BRISISSS
+            printS = False  # BRISISSS
             if printS:
-                print >> fh_info, 'S2='
+                print("S2=", file=fh_info)
                 mprint(fh_info, S2e)
-                print >> fh_info, 'H='
+                print("H=", file=fh_info)
                 cprint(fh_info, Ham)
-                for it,t in enumerate(trouble):
-                    print >> fh_info, 'A[%d]=' % t
-                    print >> fh_info, Tx[t]
+                for it, t in enumerate(trouble):
+                    print("A[%d]=" % t, file=fh_info)
+                    print(Tx[t], file=fh_info)
 
-            S2w.append([0.5*int(round(-1+sqrt(1+4*S2e[i,i].real))) for i in range(len(S2e))]) # Spin is computed using formula s(s+1)
+            S2w.append(
+                [
+                    0.5 * int(round(-1 + sqrt(1 + 4 * S2e[i, i].real)))
+                    for i in range(len(S2e))
+                ]
+            )  # Spin is computed using formula s(s+1)
         else:
-            S2w.append( [0 for i in range(len(S2))] )
-
-
+            S2w.append([0 for i in range(len(S2))])
 
         ##### NEW
         if PrintSminus:
-            if (j_minus>=0):
-                #print 'len(Te)=', len(Te), 'j_minus=', j_minus
+            if j_minus >= 0:
+                # print 'len(Te)=', len(Te), 'j_minus=', j_minus
                 _S_minus_ = matrix(conj(Tx.transpose())) * S_minus * matrix(Te[j_minus])
-                Si_minus[ni]=j_minus
-                Sm_minus[ni]= real(_S_minus_)
+                Si_minus[ni] = j_minus
+                Sm_minus[ni] = real(_S_minus_)
         ##### NEW
 
-        #print >> fh_info, 'E=', '%f '*len(Ex) % tuple(Ex)
-        print >> fh_info, 'state, E, |largest_coeff|'
+        # print >> fh_info, 'E=', '%f '*len(Ex) % tuple(Ex)
+        print("state, E, |largest_coeff|", file=fh_info)
         for ie in range(len(Ex)):
-            ilargest = argmax(abs(Tx[:,ie]))
-            print >> fh_info, op.printn(states[ilargest]),  Ex[ie], abs(Tx[ilargest,ie])
+            ilargest = argmax(abs(Tx[:, ie]))
+            print(
+                op.printn(states[ilargest]), Ex[ie], abs(Tx[ilargest, ie]), file=fh_info
+            )
 
+    # print 'kindx=', kindx
+    # print 'wstates=', wstates
 
-    #print 'kindx=', kindx
-    #print 'wstates=', wstates
-
-    print 'Br:', 'kindx=', kindx
+    print("Br:", "kindx=", kindx)
 
     # Here we create index for psi^dagger
-    iFi = zeros((len(wstates),len(baths)),dtype=int)
-    for ni,ns in enumerate(wstates):
-        for ib,be in enumerate(baths):
+    iFi = zeros((len(wstates), len(baths)), dtype=int)
+    for ni, ns in enumerate(wstates):
+        for ib, be in enumerate(baths):
             if op.Q3d:
-                st = (ns[0]+1, ns[1] + be[1])  # (n+1,sz+s)
+                st = (ns[0] + 1, ns[1] + be[1])  # (n+1,sz+s)
                 if st in kindx:
-                    iFi[ni,ib] = indx[st]
+                    iFi[ni, ib] = indx[st]
             else:
-                st = (ns[0]+1, 0)  # (n+1,sz+s)
+                st = (ns[0] + 1, 0)  # (n+1,sz+s)
                 if st in kindx:
-                    iFi[ni,ib] = indx[st]
+                    iFi[ni, ib] = indx[st]
 
-    wgr=[]
-    for iw in range(len(wstates)): wgr.append([])
-
-    print 'Br:', 'Stage1: Computing F^ in direct base'
-    print >> fh_info, 'Stage1: Computing F^ in direct base'
+    wgr = [[] for iw in range(len(wstates))]
+    print("Br:", "Stage1: Computing F^ in direct base")
+    print("Stage1: Computing F^ in direct base", file=fh_info)
 
     # Below we compute matrix elements of F^ (FKP)
-    kindx = indx.keys()
+    kindx = list(indx.keys())
     FKP = []
-    for ni,ns in enumerate(wstates):
+    for ni, ns in enumerate(wstates):
         states = ns[2]
-        bFp=[]
+        bFp = []
 
-        if CoulombF[:5] == 'Ising':
+        if CoulombF[:5] == "Ising":
             wgr[ni] += [[ist] for ist in range(len(states))]
 
-        for ib,wib in enumerate(baths):
-            inew = iFi[ni,ib]
-            if inew==0:
+        for ib, wib in enumerate(baths):
+            inew = iFi[ni, ib]
+            if inew == 0:
                 bFp.append([])
                 continue
 
@@ -2261,183 +2202,190 @@ if __name__ == '__main__':
 
             Fp = zeros((len(states), len(newstates)), dtype=complex)
 
-            for js,st in enumerate(states):
+            for js, st in enumerate(states):
                 (newst, sig) = op.Fp(st, ib)
-                if newst>0:
+                if newst > 0:
                     ii = newstates.index(newst)
-                    Fp[js,ii] += sig
-                #print 'state=', st, newst, ii
+                    Fp[js, ii] += sig
+                # print 'state=', st, newst, ii
 
-            if CoulombF[:5] == 'Ising':
+            if CoulombF[:5] == "Ising":
                 bFp.append(Fp)
             else:
-
-                Fpn = matrix(conj(Te[ni].transpose())) * matrix(Fp) * matrix(Te[inew])
+                Fpn = Te[ni].conj().T @ Fp @ Te[inew]
 
                 # Set to zero small values
                 for i0 in range(shape(Fpn)[0]):
-                    for i1 in range(shape(Fpn)[1]):
-                        if abs(Fpn[i0,i1])<small: Fpn[i0,i1]=0.0
+                    Fpn[i0, abs(Fpn[i0, :]) < small] = 0.0
+                # slower bu more readable way
+                # for i0 in range(shape(Fpn)[0]):
+                #    for i1 in range(shape(Fpn)[1]):
+                #        if abs(Fpn[i0,i1])<small: Fpn[i0,i1]=0.0
 
-                gr = analizeGroups(Fpn, small)
+                gr0, gr1 = analizeGroups(Fpn, small)
 
                 # |inew> = F^+ |ni>
-                wgr[ni] += gr[0]   # which states are coupled by F^ in |ni>
-                wgr[inew] += gr[1] # which states are coupled by F^ in |inew>
-
+                wgr[ni] += gr0  # which states are coupled by F^ in |ni>
+                wgr[inew] += gr1  # which states are coupled by F^ in |inew>
                 bFp.append(Fpn)
 
         FKP.append(bFp)
 
-    #FKP created!
+    # FKP created!
 
-    print 'Br:', 'Stage2: Compressing F^+ according to its block diagonal form'
-    print >> fh_info, 'Stage2: Compressing F^+ according to its block diagonal form'
+    print("Br:", "Stage2: Compressing F^+ according to its block diagonal form")
+    print("Stage2: Compressing F^+ according to its block diagonal form", file=fh_info)
 
     for i in range(len(wstates)):
         wgr[i] = compress(wgr[i])
-        print >> fh_info, i+1, wgr[i]
+        print(i + 1, wgr[i], file=fh_info)
 
-    print >> fh_info, 'Stage3: Renumbers states -- creates superstates for ctqmc'
-    print 'Br:', 'Stage3: Renumbers states -- creates superstates for ctqmc'
+    print("Stage3: Renumbers states -- creates superstates for ctqmc", file=fh_info)
+    print("Br:", "Stage3: Renumbers states -- creates superstates for ctqmc")
 
     # Here we store ground state and N for each superstates to be used later for sorting
-    tstates=[]
+    tstates = []
     for iw in range(len(wstates)):
         Nt = sum(wstates[iw][0])
         for ip in range(len(wgr[iw])):
             Eg = Ene[iw][wgr[iw][ip][0]]
-            tstates.append([iw,ip,Nt,Eg])
+            tstates.append([iw, ip, Nt, Eg])
 
     # Uncomment this if you want to sort according to energy
-    #tstates.sort(comp)
+    # tstates.sort(comp)
     # Here we sort only by particle number
-    #tstates.sort(lambda a,b: cmp(a[2],b[2]))
+    # tstates.sort(lambda a,b: cmp(a[2],b[2]))
 
     # tstates contains [index-to-wstates, index-to-state-inside-wstates, N, E]
 
     # superstates == pseudostates are defined
-    pseudostates=[]
-    indpseudo={}
-    jj=0
+    pseudostates = []
+    indpseudo = {}
+    jj = 0
     for st in tstates:
         iw = st[0]
         ip = st[1]
-        pseudostates.append([iw,ip])
-        indpseudo[(iw,ip)] = jj
-        jj+=1
+        pseudostates.append([iw, ip])
+        indpseudo[(iw, ip)] = jj
+        jj += 1
 
-    iFi_inside=[]
+    iFi_inside = []
     for iw in range(len(wstates)):
-        biFi=[]
+        biFi = []
         for ib in range(len(baths)):
-            ifi = iFi[iw,ib]
-            if ifi>0:
+            ifi = iFi[iw, ib]
+            if ifi > 0:
                 fpair = coupled(FKP[iw][ib], wgr[iw], wgr[ifi], small)
                 biFi.append(fpair)
             else:
                 biFi.append([])
         iFi_inside.append(biFi)
 
-    #print 'iFi_inside=', iFi_inside
+    # print 'iFi_inside=', iFi_inside
 
     # creates arrays containing Energy, occupancy and index table for all superstates
-    iFinal = zeros((len(pseudostates),len(baths)),dtype=int)
+    iFinal = zeros((len(pseudostates), len(baths)), dtype=int)
     Enes = []
     S2ws = []
-    Occ=[]
-    rS_minus={}
-    iS_minus={}
-    for ii,iwp in enumerate(pseudostates):
+    Occ = []
+    rS_minus = {}
+    iS_minus = {}
+    for ii, iwp in enumerate(pseudostates):
         iw = iwp[0]
         ip = iwp[1]
         wstate = wstates[iw]
         group = wgr[iw][ip]
 
         for ib in range(len(baths)):
-            ifi = iFi[iw,ib]
+            ifi = iFi[iw, ib]
             ifinal = -1
-            if (ifi>0):
+            if ifi > 0:
                 ifi_ins = iFi_inside[iw][ib][ip]
-                if ifi_ins>=0:
-                    ifinal = indpseudo[(ifi,ifi_ins)]
-            iFinal[ii,ib] = ifinal
+                if ifi_ins >= 0:
+                    ifinal = indpseudo[(ifi, ifi_ins)]
+            iFinal[ii, ib] = ifinal
 
-        Ens=[]
-        occ=[]
-        S2s=[]
-        for iq,q in enumerate(group):
+        Ens = []
+        occ = []
+        S2s = []
+        for iq, q in enumerate(group):
             Ens.append(Ene[iw][q])
             occ.append(wstate[0])
             S2s.append(S2w[iw][q])
-
 
         Enes.append(Ens)
         Occ.append(occ)
         S2ws.append(S2s)
         ### NEW
         if PrintSminus:
-            if Si_minus.has_key(iw):
+            if iw in Si_minus:
                 _N_ = wstate[0]
                 _Sz_ = wstate[1]
-                for jj,jwp in enumerate(pseudostates):
+                for jj, jwp in enumerate(pseudostates):
                     jw = jwp[0]
                     jp = jwp[1]
-                    if (wstates[jw][0]==_N_ and wstates[jw][1]==_Sz_-2):
-                        if jw!=Si_minus[iw]:
-                            print 'ERROR in S_minus. The two indices are different jw=', jw, 'Si=', Si_minus[iw]
+                    if wstates[jw][0] == _N_ and wstates[jw][1] == _Sz_ - 2:
+                        if jw != Si_minus[iw]:
+                            print(
+                                "ERROR in S_minus. The two indices are different jw=",
+                                jw,
+                                "Si=",
+                                Si_minus[iw],
+                            )
                         group_final = wgr[jw][jp]
-                        SM_minus = zeros((len(group),len(group_final)))
-                        for iig,ig in enumerate(group):
-                            for jjg,jg in enumerate(group_final):
-                                SM_minus[iig,jjg] = Sm_minus[iw][ig,jg]
-                        if sum(abs(SM_minus))>1e-7:
-                            #print 'possible S- between ii+=', ii+1, 'and jj+=', jj+1, 'where jw=', jw, 'Si=', Si_minus[iw], 'wgr=', wgr[jw][jp], 'shape(S_minus)=', shape(Sm_minus[iw])
-                            #mprint(sys.stdout, SM_minus)
+                        SM_minus = zeros((len(group), len(group_final)))
+                        for iig, ig in enumerate(group):
+                            for jjg, jg in enumerate(group_final):
+                                SM_minus[iig, jjg] = Sm_minus[iw][ig, jg]
+                        if sum(abs(SM_minus)) > 1e-7:
+                            # print 'possible S- between ii+=', ii+1, 'and jj+=', jj+1, 'where jw=', jw, 'Si=', Si_minus[iw], 'wgr=', wgr[jw][jp], 'shape(S_minus)=', shape(Sm_minus[iw])
+                            # mprint(sys.stdout, SM_minus)
                             rS_minus[ii] = SM_minus
                             iS_minus[ii] = jj
         ### NEW
 
-    #print 'pseudostates=', pseudostates
-    #print 'Enes='
-    #for ii in range(len(Enes)):
+    # print 'pseudostates=', pseudostates
+    # print 'Enes='
+    # for ii in range(len(Enes)):
     #    print 'ii=', Enes[ii][0]
-    #print 'Occ=', Occ
-    #print 'S2=', S2ws
+    # print 'Occ=', Occ
+    # print 'S2=', S2ws
 
-    print >> fh_info, 'Stage4: F^dagger matrices between superstates evaluated'
-    print 'Br:', 'Stage4: F^dagger matrices between superstates evaluated'
+    print("Stage4: F^dagger matrices between superstates evaluated", file=fh_info)
+    print("Br:", "Stage4: F^dagger matrices between superstates evaluated")
 
     # creates small F^dagger matrices between superstates
     maxs = 0
     rFKP = []
-    rNn=[]  # This is the matrix F*F^ == 1-N
+    rNn = []  # This is the matrix F*F^ == 1-N
 
-    for ii,iwp in enumerate(pseudostates):
+    for ii, iwp in enumerate(pseudostates):
         iw = iwp[0]
         ip = iwp[1]
         wstate = wstates[iw]
         group = wgr[iw][ip]
 
-        bNn=[]
-        bFKP=[]
+        bNn = []
+        bFKP = []
         for ib in range(len(baths)):
-            ifi = iFi[iw,ib]
-            ifinal = iFinal[ii,ib]
-            if (ifi>0): ifi_ins = iFi_inside[iw][ib][ip]
+            ifi = iFi[iw, ib]
+            ifinal = iFinal[ii, ib]
+            if ifi > 0:
+                ifi_ins = iFi_inside[iw][ib][ip]
 
-            if ifinal>=0:
-                M = zeros((len(group),len(wgr[ifi][ifi_ins])),dtype=complex)
-                for ii0,i0 in enumerate(group):
-                    for jj0,j0 in enumerate(wgr[ifi][ifi_ins]):
-                        M[ii0,jj0] = FKP[iw][ib][i0,j0]
+            if ifinal >= 0:
+                M = zeros((len(group), len(wgr[ifi][ifi_ins])), dtype=complex)
+                for ii0, i0 in enumerate(group):
+                    for jj0, j0 in enumerate(wgr[ifi][ifi_ins]):
+                        M[ii0, jj0] = FKP[iw][ib][i0, j0]
 
-                if max(shape(M)) > maxs : maxs = max(shape(M))
+                if max(shape(M)) > maxs:
+                    maxs = max(shape(M))
 
-                Nn = zeros((len(group),len(group)))
-                for ii0,i0 in enumerate(group):
-                    for ii1,i1 in enumerate(group):
-                        Nn[ii0,ii1]=sum(M[ii0]*M[ii1]).real
+                Nn = zeros((len(group), len(group)))
+                for ii0, i0 in enumerate(group):
+                    for ii1, i1 in enumerate(group):
+                        Nn[ii0, ii1] = sum(M[ii0] * M[ii1]).real
 
             else:
                 M = array([])
@@ -2447,350 +2395,91 @@ if __name__ == '__main__':
         rFKP.append(bFKP)
         rNn.append(bNn)
 
-
-    ############################################################################################
-    ######## The part of the code between this symbols,  generates input for OCA solver  #######
-    ############################################################################################
-    if (OCA_G):
-        print >> fh_info, 'Stage5: Renumber states for oca - each atomic states has unique number'
-        # renumbers states such that each of 1024 states has unique index
-        # also remembers energy and N for each state
-        (puniq, ipE, ipN, ipS) = RenumberStates(pseudostates, Enes, wstates, S2ws)
-
-        # bubbles will be accessed by bubbles[ib][ii][ij]
-        # where ib is integer running over all baths, ii is integer running over all possible states
-        # and ij is integer which can be accessed by F^{+,ib}|ii>
-        bubbles = CreateEmpty2D_Dict(len(kbth), len(ipE))
-        FpF = zeros((len(ipE),len(kbth)))
-        smallb=1e-4
-        for ib,bs in enumerate(kbth): # over all different baths
-            bubl=bubbles[ib]
-            for ii,iwp in enumerate(pseudostates): # over all pseudostates
-                for iib in bs: # over equivalent baths
-                    ifinal = iFinal[ii,iib]
-                    if ifinal>=0:
-                        dims = shape(rFKP[ii][iib])
-                        for i0 in range(dims[0]):
-                            istr = puniq[(ii,i0)]
-                            for j0 in range(dims[1]):
-                                iend = puniq[(ifinal,j0)]
-                                FpF[istr][ib] += abs(rFKP[ii][iib][i0,j0])**2
-                                if (abs(rFKP[ii][iib][i0,j0])>smallb):
-                                    if bubl[istr].has_key(iend):
-                                        bubl[istr][iend] += abs(rFKP[ii][iib][i0,j0])**2
-                                    else:
-                                        bubl[istr][iend] = abs(rFKP[ii][iib][i0,j0])**2
-
-        if para:
-            (equiv, iequiv) = EquivalentStates(ipE, ipN)
-        else:
-            equiv = range(len(ipE))
-            iequiv = [[i] for i in range(len(ipE))]
-        #print 'EQUIV=', equiv
-        #print 'IEQUIV=', iequiv
-
-        # Now we have all the bubbles.
-        # We need to find which states are equivalent
-        for tt in range(Nitt):
-
-            # We want to merge bubbles that we believe are equivalent
-            ebubbles=[]
-            for ib,bs in enumerate(kbth):
-                bubl = bubbles[ib]
-
-                nbubl=[]
-                for i in range(len(bubl)): nbubl.append({})
-
-                for i0 in range(len(bubl)):
-                    for i1 in bubl[i0].keys():
-                        if nbubl[i0].has_key(equiv[i1]):
-                            nbubl[i0][equiv[i1]] += bubl[i0][i1]
-                        else:
-                            nbubl[i0][equiv[i1]] = bubl[i0][i1]
-                ebubbles.append(nbubl)
-
-            # Here we check if the states, which we idenfified above as equivalent,
-            # really are equivalent, i.e., have the same type of bubble
-            new_iequiv=[]
-            back_bubs=[]
-            for ii in iequiv:
-                cbubs=[]
-                for ij in ii:
-                    cbub={}
-                    for ib in range(len(kbth)):
-                        cbub.update(ebubbles[ib][ij])
-                    cbubs.append(cbub)
-
-                abubs = AverageBubbles([[ebubbles[ib][ij] for ij in ii] for ib in range(len(kbth))])
-
-                ieqs = VEquivalentStates(cbubs,ii)
-
-                back_bubs.append(abubs)
-
-                new_iequiv += ieqs
-
-
-            new_equiv=range(len(equiv))
-            for i,ii in enumerate(new_iequiv):
-                for j in ii: new_equiv[j]=i
-
-
-            if len(iequiv)==len(new_iequiv) or tt+1==Nitt: break
-            equiv = new_equiv
-            iequiv = new_iequiv
-
-        print >> fh_info, 'before qOCA'
-
-        if qOCA:  # Here we add second order OCA diagrams to NCA bubbles
-            # Second order diagramms
-            # OCAdiag will be accessed by OCAdiag[ib1][ib2][ii][ij]
-            # where ib1, ib2 is integer running over all baths, ii is integer running over all possible states
-            # and ij is integer which can be accessed by F^{+,ib}|ii>
-            OCAdiag = CreateEmpty3D_Dict(len(kbth), len(kbth), len(iequiv))
-
-            for ib1,bs1 in enumerate(kbth):     # over all baths ones
-                for ib2,bs2 in enumerate(kbth): # over all baths twice
-                    OCAs=OCAdiag[ib1][ib2]
-                    for ii,iwp in enumerate(pseudostates): # over all pseudostates
-                        for iib1 in bs1:        # over equivalent baths ones
-                            for iib2 in bs2:    # over equivalent baths twice
-                                ifinal_j = iFinal[ii,iib1]
-                                ifinal_l = iFinal[ii,iib2]
-                                if ifinal_j>=0 and ifinal_l>=0:
-                                    ifinal_k = iFinal[ifinal_j,iib2]
-                                    ifinal_k2 = iFinal[ifinal_l,iib1]
-                                    if ifinal_k>=0 and ifinal_k2>=0 and ifinal_k==ifinal_k2:
-                                        Fij = rFKP[ii][iib1]
-                                        Fil = rFKP[ii][iib2]
-                                        Fjk = rFKP[ifinal_j][iib2]
-                                        Flk = rFKP[ifinal_l][iib1]
-                                        (dims_i, dims_j)  = shape(Fij)
-                                        (dims_i2,dims_l)  = shape(Fil)
-                                        (dims_j2, dims_k) = shape(Fjk)
-                                        (dims_l2,dims_k2) = shape(Flk)
-                                        if dims_i != dims_i2: print 'Troubles i'
-                                        if dims_j != dims_j2: print 'Troubles j'
-                                        if dims_l != dims_l2: print 'Troubles l'
-                                        if dims_k != dims_k2: print 'Troubles k'
-
-                                        for i0 in range(dims_i):
-                                            iu = equiv[puniq[(ii,i0)]]
-                                            for j0 in range(dims_j):
-                                                ju = equiv[puniq[(ifinal_j,j0)]]
-                                                if (abs(Fij[i0,j0])<smallb): continue
-                                                for k0 in range(dims_k):
-                                                    ku = equiv[puniq[(ifinal_k,k0)]]
-                                                    if (abs(Fjk[j0,k0])<smallb): continue
-                                                    for l0 in range(dims_l):
-                                                        lu = equiv[puniq[(ifinal_l,l0)]]
-                                                        if (abs(Fil[i0,l0])<smallb): continue
-                                                        if (abs(Flk[l0,k0])<smallb): continue
-                                                        contr = -Fij[i0,j0]*Fjk[j0,k0]*Flk[l0,k0]*Fil[i0,l0]
-                                                        akey = (ju,ku,lu)
-                                                        if OCAs[iu].has_key(akey):
-                                                            OCAs[iu][akey] += contr
-                                                        else:
-                                                            OCAs[iu][akey] = contr
-            # OCA diagramms are renumbered to (i0,i1,i2,i3,ib1,ib2) where
-            # i0,i1,i2,i3 are atomic states involved in the diagram and ib1,ib2 are the two bath
-            # propagators in the diagram.
-            OCAf={}
-            for i in range(len(iequiv)):
-                for ib1 in range(len(kbth)):
-                    for ib2 in range(len(kbth)):
-                        for ks in OCAdiag[ib1][ib2][i].keys():
-                            if abs(OCAdiag[ib1][ib2][i][ks])<1e-10: continue
-                            if (ib2<=ib1):
-                                new_key = (i,) + ks + (ib1,ib2)
-                                OCAf[new_key] = OCAdiag[ib1][ib2][i][ks]
-                            else: # Due to time invariance, some diagrams are equivalent. For example
-                                  #  0 (b1) 1 (b2) 4 (b1) 2 (b2) 0    and      0 (b2) 2 (b1) 4 (b2) 1 (b1) 0
-                                new_key = (i,) + (ks[2],ks[1],ks[0]) + (ib2,ib1)
-                                OCAf[new_key] = OCAdiag[ib1][ib2][i][ks]
-
-        # Here we regroup N_a =F^+ F  in more convenient way
-        rFpF = zeros((len(iequiv),len(kbth)))
-        for i in range(len(equiv)):
-            df = FpF[0]-FpF[i]
-            for j in range(len(df)):  # if we don't do that, the occupancy can be annoyingly negative
-                if abs(df[j])<1e-10: df[j]=0
-            rFpF[equiv[i]] += df
-        for i,ii in enumerate(iequiv):
-            rFpF[i]/=len(iequiv[i]) # it has to be average, not the sum
-
-        # Bubble contains diagrams named b (back). We need to construct from these also the other diagramms
-        # which are called f (forward).
-        forw_bubs = CreateEmpty2D_Dict(len(iequiv), len(kbth))
-        for i in range(len(iequiv)):
-            for b in range(len(kbth)):
-                for ks in back_bubs[i][b]:
-                    forw_bubs[ks][b][i]= back_bubs[i][b][ks]
-
-        # We want to have energy of each OCA-pseudoparticle ready
-        Eq=zeros(len(iequiv))
-        Egs=zeros(len(iequiv))
-        Nq=zeros(len(iequiv),dtype=int)
-        Nc0=0; Eg0=ipE[0]
-        for i,ii in enumerate(iequiv):
-            Nq[i] = ipN[ii[0]]
-            Eq[i] = ipE[ii[0]]
-            Egs[i] = Eg0   # ground state in this sector
-            if (Nq[i]>Nc0):
-                Nc0=Nq[i]
-                Eg0=Eq[i]
-                Egs[i]=Eg0
-
-        # last renumbering for printing!
-        # Only occupancies in n=[....] need to be kept. The rest of the diagrams is ignored.
-        pu=-ones(len(iequiv),dtype=int)
-        pl=0
-        for i,ii in enumerate(iequiv):
-            if Nq[i] in n:
-                pu[i]=pl
-                pl+=1
-
-        # Printing output for OCA
-        foca=open('out.cix', 'w')
-        print >> foca, '# Input file for OCA impurity solver.', 'l=', l, 'J=', Jc, 'Eimp=', Eimp, 'c=', cx,  'mOCA=', mOCA,  'Eoca=', Eoca
-        print >> foca, len(kbth), (("%d "*len(kbth)) % tuple(map(len,kbth))), pl, 0,
-        print >> foca, '# Number of baths it\'s degeneracy and number of local valence and local core states'
-
-        print >> foca, '%3s' % '#',
-        print >> foca, ("%6s")*len(kbth) % tuple(map(lambda x: 'N'+str(x), range(len(kbth)))),
-        print >> foca, "%4s" % 'Mtot', '%4s' % 'deg', '%10s' % 'Eatom',
-        print >> foca, ("%3s"%'#b')*len(back_bubs[i]),
-        print >> foca, ("%3s"%'#f')*len(forw_bubs[i])
-
-        for i,ii in enumerate(iequiv):
-            if pu[i] <0 : continue  # state not used
-
-            print >> foca, "%3d" % pu[i], (("%6.2f")*len(kbth) % tuple(rFpF[i])), "%4d" % Nq[i], #ipN[ii[0]],
-            print >> foca, "%4d" % len(ii),
-
-            Eatom = ipE[ii[0]]  # This is the atomic energy
-            for ib in range(len(kbth)): Eatom -= rFpF[i][ib]*Eimp[ib]  # This part will be added back inside the impurity solver, therefore the energy should be subtracted
-
-            print >> foca, "%10.4f" % Eatom,
-
-            for b in range(len(kbth)): # delete diagrams which include states that were removed
-                for ks in back_bubs[i][b].keys():
-                    if pu[ks]<0: # this diagram involves state not considered
-                        del back_bubs[i][b][ks]
-                for ks in forw_bubs[i][b].keys():
-                    if pu[ks]<0: # this diagram involves state not considered
-                        del forw_bubs[i][b][ks]
-
-
-            print >> foca, ("%3d"*len(back_bubs[i])) % tuple(map(len,back_bubs[i])),
-            print >> foca, ("%3d"*len(forw_bubs[i])) % tuple(map(len,forw_bubs[i])),
-            print >> foca, '  ',
-
-            for b in range(len(kbth)):
-                for ks in back_bubs[i][b]:
-                    print >> foca, "%6.2f x %-3d  " % (back_bubs[i][b][ks], pu[ks]),
-
-            for b in range(len(kbth)):
-                for ks in forw_bubs[i][b]:
-                    print >> foca, "%6.2f x %-3d  " % (forw_bubs[i][b][ks], pu[ks]),
-
-            print >> foca, '# S ', ipS[ii[0]], ' Eatom=', ipE[ii[0]]
-
-        if qOCA:
-            print >> foca, '# OCA diagrams, information is (pp0,pp1,pp2,pp3) (b1,b2) fact , where pp is pseudoparticle and b is bath'
-            OCAF = OCAf.items()
-            OCAF.sort(lambda x,y: cmp(y[1],x[1]))
-            for i in range(len(OCAF)):
-                excitedE = [Eq[j]-Egs[j] for j in OCAF[i][0]]
-                states_involved = [pu[lx] for lx in OCAF[i][0][:4]]
-                #print states_involved
-                if (-1 in states_involved): continue  # One of the states is not considered
-                if max(excitedE)>Eoca:  continue      # We take it into account only if all states that are involved, have energy close to the ground state energy for this occupancy
-                if abs(OCAF[i][1])<mOCA: continue     # Matrix element negligible
-                if not (Nq[OCAF[i][0][1]] in Ncentral): continue
-
-                print >> foca, "%3d %3d %3d %3d   " % tuple(states_involved), #tuple([pu[l] for l in OCAF[i][0][:4]]),
-                print >> foca, "%2d %2d" % tuple(OCAF[i][0][4:]),
-                print >> foca, real(OCAF[i][1]),
-                print >> foca, '   #', [Eq[j]-Egs[j] for j in OCAF[i][0]]
-
-        ############################################################################################
-        ######## End of the part which generates input for OCA solver                        #######
-        ############################################################################################
-
-
     # Extract low energy states
-    lowE=[]
-    low_maxsize=0
+    lowE = []
+    low_maxsize = 0
     for ii in range(len(Enes)):
-        size=0
-        plowE=[]
-        for iq in range(min(len(Enes[ii]),max_M_size)):
-            if Enes[ii][iq]>=Ewindow[0] and Enes[ii][iq]<Ewindow[1] and iq<Nmax:
+        size = 0
+        plowE = []
+        for iq in range(builtins.min(len(Enes[ii]), max_M_size)):
+            if Enes[ii][iq] >= Ewindow[0] and Enes[ii][iq] < Ewindow[1] and iq < Nmax:
                 plowE.append(iq)
                 size += 1
-        if size>low_maxsize: low_maxsize = size
-        if len(plowE)>0:
-            lowE.append((ii,plowE))
+        if size > low_maxsize:
+            low_maxsize = size
+        if len(plowE) > 0:
+            lowE.append((ii, plowE))
 
     # Creates index array between all states and low energy ones
-    inv_lowE1={-1:-1}
-    for i in range(len(pseudostates)): inv_lowE1[i]=-1
+    inv_lowE1 = {-1: -1}
+    for i in range(len(pseudostates)):
+        inv_lowE1[i] = -1
     for i in range(len(lowE)):
         ii = lowE[i][0]
-        inv_lowE1[ii]=i
+        inv_lowE1[ii] = i
 
-    #print 'lowE=', lowE
-    #print 'inv_lowE1=', inv_lowE1
+    # print 'lowE=', lowE
+    # print 'inv_lowE1=', inv_lowE1
 
-    #print 'Enes='
-    #for ii in range(len(Enes)):
+    # print 'Enes='
+    # for ii in range(len(Enes)):
     #    print 'ii=', Enes[ii][0]
-
 
     nbaths = len(bkeep)
 
     wcoupled = FindCoupledBaths(Sigind_orig)
-    print >> fh_info, 'wcoupled=', wcoupled
-    DiagonalOnly=True
-    if sum(map(len,wcoupled) - ones(len(wcoupled)))!=0:
-        DiagonalOnly=False
+    print("wcoupled=", wcoupled, file=fh_info)
+    DiagonalOnly = True
+    if sum(list(map(len, wcoupled)) - ones(len(wcoupled))) != 0:
+        DiagonalOnly = False
         nbaths = len(wcoupled)
-    print >> fh_info, 'Diagonal=', DiagonalOnly
+    print("Diagonal=", DiagonalOnly, file=fh_info)
 
-    fcix = open('actqmc.cix', 'w')
+    fcix = open("actqmc.cix", "w")
     # ---------------------------------------------------------------------------------------
     # -------------- Below is printing for ctqmc  solver ------------------------------------
     # ---------------------------------------------------------------------------------------
-    print >> fcix, '# CIX file for ctqmc! '
-    print >> fcix, '# cluster_size, number of states, number of baths, maximum_matrix_size'
-    print >> fcix, 1, len(lowE), nbaths, low_maxsize
-    print >> fcix, '# baths, dimension, symmetry'
+    print("# CIX file for ctqmc! ", file=fcix)
+    print(
+        "# cluster_size, number of states, number of baths, maximum_matrix_size",
+        file=fcix,
+    )
+    print(1, len(lowE), nbaths, low_maxsize, file=fcix)
+    print("# baths, dimension, symmetry", file=fcix)
 
     if DiagonalOnly:
         for ib in range(nbaths):
-            print >> fcix, ib, '  ', 1, Sigind[bkeep[ib],bkeep[ib]]-1, '  ', global_flip[bkeep[ib]]
+            print(
+                ib,
+                "  ",
+                1,
+                Sigind[bkeep[ib], bkeep[ib]] - 1,
+                "  ",
+                global_flip[bkeep[ib]],
+                file=fcix,
+            )
     else:
-        for ib,w in enumerate(wcoupled):
-            print >> fcix, ib, len(w),
+        for ib, w in enumerate(wcoupled):
+            print(ib, len(w), end=" ", file=fcix)
             for i in w:
                 for j in w:
-                    print >> fcix, Sigind_orig[i,j]-1,
+                    print(Sigind_orig[i, j] - 1, end=" ", file=fcix)
             if Q3d:
-                print >> fcix, ib % (len(wcoupled)/2)
+                print(ib % (len(wcoupled) / 2), file=fcix)
             else:
-                print >> fcix, ib/2
-        print >> fcix, '# changing order of psi operators'
-        print >> fcix, 'FL_FROM_IFL'
-        for ii,w in enumerate(wcoupled):
+                print(ib / 2, file=fcix)
+        print("# changing order of psi operators", file=fcix)
+        print("FL_FROM_IFL", file=fcix)
+        for ii, w in enumerate(wcoupled):
             for i in w:
-                print >> fcix, Sigind_orig[i,i]-1,
-            print >> fcix
+                print(Sigind_orig[i, i] - 1, end=" ", file=fcix)
+            print(file=fcix)
 
-    print >> fcix, '# cluster energies for non-equivalent baths, eps[k]'
-    for E in tEimp: print >> fcix, E,
-    print >> fcix
-    print >> fcix, '#   N   K   Sz size'
-
+    print("# cluster energies for non-equivalent baths, eps[k]", file=fcix)
+    # for E in tEimp: print(E, end=' ', file=fcix)
+    print(("{:.10f} " * len(tEimp)).format(*tEimp), file=fcix)
+    # print(file=fcix)
+    print("#   N   K   Sz size", file=fcix)
 
     for i in range(len(lowE)):
         ii = lowE[i][0]
@@ -2799,268 +2488,318 @@ if __name__ == '__main__':
         ip = iwp[1]
         wstate = wstates[iw]
 
-        if CoulombF[:5] == 'Ising':
-            gs=wstate[2][ip]
+        if CoulombF[:5] == "Ising":
+            gs = wstate[2][ip]
             nrm = 1.0
         else:
-            ilargest = argmax(abs(Te[iw][:,ip]))
+            ilargest = argmax(abs(Te[iw][:, ip]))
             gs = wstate[2][ilargest]
-            nrm = abs(Te[iw][ilargest,ip])
+            nrm = abs(Te[iw][ilargest, ip])
         if op.Q3d:
-            Mz = sum(wstate[1])/2.
+            Mz = sum(wstate[1]) / 2.0
         else:
             Mz = op.Mz(gs)
 
-        print >> fcix, "%3d  %2d %2d %6.3f %2d " % (i+1, sum(wstate[0]), 0, Mz, len(lowE[i][1])),
+        print(
+            "%3d  %2d %2d %6.3f %2d " % (i + 1, sum(wstate[0]), 0, Mz, len(lowE[i][1])),
+            end=" ",
+            file=fcix,
+        )
         for ib in bkeep:
-            ifinal = iFinal[ii,ib]
-            print >> fcix, "%3d" % (inv_lowE1[ifinal]+1),
-        print >> fcix, "  ",
+            ifinal = iFinal[ii, ib]
+            print("%3d" % (inv_lowE1[ifinal] + 1), end=" ", file=fcix)
+        print("  ", end=" ", file=fcix)
         for iq in lowE[i][1]:
-            print >> fcix, "%12.8f" % (Enes[ii][iq],),
-        print >> fcix, "  ",
+            print("%12.8f" % (Enes[ii][iq],), end=" ", file=fcix)
+        print("  ", end=" ", file=fcix)
         for iq in lowE[i][1]:
-            print >> fcix, S2ws[ii][iq],
-        #if CoulombF[:5] == 'Ising':
+            print(S2ws[ii][iq], end=" ", file=fcix)
+        # if CoulombF[:5] == 'Ising':
         #    print >> fcix, "  # ", op.printn(gs),
-        print >> fcix, "  # ", op.printn(gs), nrm,
-        print >> fcix
+        print("  # ", op.printn(gs), nrm, end=" ", file=fcix)
+        print(file=fcix)
 
-    print >> fcix, '# matrix elements'
+    print("# matrix elements", file=fcix)
 
     for i in range(len(lowE)):
         ii = lowE[i][0]
         for ib in bkeep:
-            ifinal = iFinal[ii,ib]
+            ifinal = iFinal[ii, ib]
             low_ifinal = inv_lowE1[ifinal]
-            print >> fcix, "%3d %3d " % (i+1, low_ifinal+1),
-            if low_ifinal>=0:
+            print("%3d %3d " % (i + 1, low_ifinal + 1), end=" ", file=fcix)
+            if low_ifinal >= 0:
                 ind0 = lowE[i][1]
                 ind1 = lowE[low_ifinal][1]
-                print >> fcix, "%2d %2d" % (len(ind0), len(ind1)),
+                print("%2d %2d" % (len(ind0), len(ind1)), end=" ", file=fcix)
                 for i0 in ind0:
                     for j0 in ind1:
-                        x = rFKP[ii][ib][i0,j0]
-                        if abs(x.imag)<1e-4 or PrintReal:
-                            print >> fcix, "%20.16f" % (x.real,) ,
+                        x = rFKP[ii][ib][i0, j0]
+                        if abs(x.imag) < 1e-4 or PrintReal:
+                            print("%20.16f" % (x.real,), end=" ", file=fcix)
                         else:
-                            print >> fcix, x,
+                            print(x, end=" ", file=fcix)
             else:
-                print >> fcix, "%2d %2d" % (0, 0),
-            print >> fcix
+                print("%2d %2d" % (0, 0), end=" ", file=fcix)
+            print(file=fcix)
 
-    if HB2 : print >> fcix, 'HB2'
-    else: print >> fcix, 'HB1'
+    if HB2:
+        print("HB2", file=fcix)
+    else:
+        print("HB1", file=fcix)
 
-    if (HB2 and Q3d):
-        ii=0
-        iind={}
-        for i1,bs1 in enumerate(baths):
+    if HB2 and Q3d:
+        ii = 0
+        iind = {}
+        for i1, bs1 in enumerate(baths):
             m1 = bs1[0]
             s1 = bs1[1]
-            if m1 not in bkeep: continue
-            iind[i1]=ii
-            ii+=1
-        print >> fcix, "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]"
-        for i1,bs1 in enumerate(baths):
+            if m1 not in bkeep:
+                continue
+            iind[i1] = ii
+            ii += 1
+        print(
+            "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]", file=fcix
+        )
+        for i1, bs1 in enumerate(baths):
             m1 = bs1[0]
             s1 = bs1[1]
-            if m1 not in bkeep: continue
-            for i2,bs2 in enumerate(baths):
+            if m1 not in bkeep:
+                continue
+            for i2, bs2 in enumerate(baths):
                 m2 = bs2[0]
                 s2 = bs2[1]
-                if m2 not in bkeep: continue
-                for i3,bs3 in enumerate(baths):
+                if m2 not in bkeep:
+                    continue
+                for i3, bs3 in enumerate(baths):
                     m3 = bs3[0]
                     s3 = bs3[1]
-                    if (s2!=s3): continue
-                    if m3 not in bkeep: continue
-                    for i4,bs4 in enumerate(baths):
+                    if s2 != s3:
+                        continue
+                    if m3 not in bkeep:
+                        continue
+                    for i4, bs4 in enumerate(baths):
                         m4 = bs4[0]
                         s4 = bs4[1]
-                        if (s4!=s1): continue
-                        if m4 not in bkeep: continue
-                        Uc = 0.0
-                        if CoulombF[:5] == 'Ising' and not ((i1==i4 and i2==i3) or (i1==i3 and i2==i4)):
+                        if s4 != s1:
                             continue
-                        for k in range(0,l+1):
-                            Uc += real(UC[k,m1,m2,m3,m4])*Fk[k,l]
-                        if abs(Uc)>1e-6:
-                            print >> fcix, "%2d %2d %2d %2d  %12.8f" % (iind[i1],iind[i2],iind[i3],iind[i4],Uc)
-
-    if (HB2 and not Q3d):
-        print >> fcix, "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]"
-        for bs1 in bkeep:
-            for bs2 in bkeep:
-                for bs3 in bkeep:
-                    for bs4 in bkeep:
+                        if m4 not in bkeep:
+                            continue
                         Uc = 0.0
-                        for k in range(0,l+1):
-                            UC += real(UC[k,bs1,bs2,bs3,bs4])*Fk[k,l]
-                        if abs(Uc)>1e-6:
-                            print >> fcix, "%2d %2d %2d %2d  %12.8f" % (bs1,bs2,bs3,bs4,Uc)
+                        if CoulombF[:5] == "Ising" and not (
+                            (i1 == i4 and i2 == i3) or (i1 == i3 and i2 == i4)
+                        ):
+                            continue
+                        for k in range(0, int(l + 1)):
+                            Uc += real(UC[k, m1, m2, m3, m4]) * Fk[k, int(l)]
+                        if abs(Uc) > 1e-6:
+                            print(
+                                "%2d %2d %2d %2d  %12.8f"
+                                % (iind[i1], iind[i2], iind[i3], iind[i4], Uc),
+                                file=fcix,
+                            )
 
+    if HB2 and not Q3d:
+        print(
+            "# UCoulomb : (m1,s1) (m2,s2) (m3,s2) (m4,s1)  Uc[m1,m2,m3,m4]", file=fcix
+        )
+        for ib1 in bkeep:
+            for ib2 in bkeep:
+                for ib3 in bkeep:
+                    for ib4 in bkeep:
+                        if CoulombF[:5] == "Ising" and not (
+                            (ib1 == ib4 and ib2 == ib3) or (ib1 == ib3 and ib2 == ib4)
+                        ):
+                            continue
+                        Uc = 0.0
+                        for k in range(0, l + 1):
+                            Uc += UC[k, ib1, ib2, ib3, ib4] * Fk[k, l]
+                        if abs(Uc) > 1e-6:
+                            print(
+                                "%2d %2d %2d %2d  %12.8f"
+                                % (ib1, ib2, ib3, ib4, Uc.real),
+                                file=fcix,
+                            )
 
-    print >> fcix, '# number of operators needed'
+    print("# number of operators needed", file=fcix)
 
     if not add_occupancy:
-        print >> fcix, '0'
+        print("0", file=fcix)
     else:
-        print >> fcix, '1',
-        if ORB: print >> fcix, '1',
-        elif PrintSminus: print >> fcix, '2',
-        print >> fcix
-        print >> fcix, '# Occupancy '
+        print("1", end=" ", file=fcix)
+        if ORB:
+            print("1", end=" ", file=fcix)
+        elif PrintSminus:
+            print("2", end=" ", file=fcix)
+        print(file=fcix)
+        print("# Occupancy ", file=fcix)
 
         for i in range(len(lowE)):
             ii = lowE[i][0]
             ind0 = lowE[i][1]
 
-            for ikb,bt in enumerate(tkbth):
-                Oub = zeros((len(ind0),len(ind0)),dtype=float)
+            for ikb, bt in enumerate(tkbth):
+                Oub = zeros((len(ind0), len(ind0)), dtype=float)
                 for ib in bt:
-                    Nm = zeros((len(ind0),len(ind0)),dtype=float)
-                    if len(rNn[ii][ib])>0:
+                    Nm = zeros((len(ind0), len(ind0)), dtype=float)
+                    if len(rNn[ii][ib]) > 0:
                         for j in range(len(ind0)):
                             for k in range(len(ind0)):
-                                Nm[j,k] = rNn[ii][ib][ind0[j],ind0[k]]
+                                Nm[j, k] = rNn[ii][ib][ind0[j], ind0[k]]
 
-                    Oub += identity(len(ind0))-Nm
-                print >> fcix, ("%3d " % (i+1)),
-                print >> fcix, "%2d %2d" % (len(ind0), len(ind0)),
-                for iw,i0 in enumerate(ind0):
-                    for iz,j0 in enumerate(ind0):
-                        ff = Oub[iw,iz]
-                        if abs(ff)<small: ff=0.0
-                        print >> fcix, ff,
-                print >> fcix
-
+                    Oub += identity(len(ind0)) - Nm
+                print(("%3d " % (i + 1)), end=" ", file=fcix)
+                print("%2d %2d" % (len(ind0), len(ind0)), end=" ", file=fcix)
+                for iw, i0 in enumerate(ind0):
+                    for iz, j0 in enumerate(ind0):
+                        ff = Oub[iw, iz]
+                        if abs(ff) < small:
+                            ff = 0.0
+                        print(ff, end=" ", file=fcix)
+                print(file=fcix)
 
         #### NEW
         if ORB:
-            print >> fcix, '# Orbital susc with ', ORB
+            print("# Orbital susc with ", ORB, file=fcix)
             for i in range(len(lowE)):
                 ii = lowE[i][0]
                 ind0 = lowE[i][1]
-                DM = zeros((len(bkeep),len(ind0),len(ind0)),dtype=float)
-                for iib,ib in enumerate(bkeep):
-                    N1m = zeros((len(ind0),len(ind0)),dtype=float)
-                    if len(rNn[ii][ib])>0:
+                DM = zeros((len(bkeep), len(ind0), len(ind0)), dtype=float)
+                for iib, ib in enumerate(bkeep):
+                    N1m = zeros((len(ind0), len(ind0)), dtype=float)
+                    if len(rNn[ii][ib]) > 0:
                         for j in range(len(ind0)):
                             for k in range(len(ind0)):
-                                N1m[j,k] = rNn[ii][ib][ind0[j],ind0[k]]
+                                N1m[j, k] = rNn[ii][ib][ind0[j], ind0[k]]
 
-                    DM[iib,:,:] = identity(len(ind0))-N1m
+                    DM[iib, :, :] = identity(len(ind0)) - N1m
 
-                Dorb = zeros((len(ind0),len(ind0)),dtype=float)
+                Dorb = zeros((len(ind0), len(ind0)), dtype=float)
                 for ib in range(len(bkeep)):
-                    Dorb += DM[ib,:,:]*ORB[ib]
+                    Dorb += DM[ib, :, :] * ORB[ib]
 
-                print >> fcix, "%3d %3d " % (i+1,i+1),
-                print >> fcix, "%2d %2d" % (len(ind0), len(ind0)),
-                for iw,i0 in enumerate(ind0):
-                    for iz,j0 in enumerate(ind0):
-                        ff = Dorb[iw,iz]
-                        if abs(ff)<small: ff=0.0
-                        print >> fcix, ff,
-                print >> fcix
+                print("%3d %3d " % (i + 1, i + 1), end=" ", file=fcix)
+                print("%2d %2d" % (len(ind0), len(ind0)), end=" ", file=fcix)
+                for iw, i0 in enumerate(ind0):
+                    for iz, j0 in enumerate(ind0):
+                        ff = Dorb[iw, iz]
+                        if abs(ff) < small:
+                            ff = 0.0
+                        print(ff, end=" ", file=fcix)
+                print(file=fcix)
 
         if PrintSminus:
-            Sp_i={}
-            Sp_m={}
-            print >> fcix, '# S_minus followed by S_plus'
+            Sp_i = {}
+            Sp_m = {}
+            print("# S_minus followed by S_plus", file=fcix)
             for i in range(len(lowE)):
                 ii = lowE[i][0]
                 ind0 = lowE[i][1]
-                print >> fcix, "%3d " % (i+1,),
-                if iS_minus.has_key(ii):
+                print("%3d " % (i + 1,), end=" ", file=fcix)
+                if ii in iS_minus:
                     ifinal = iS_minus[ii]
                     low_ifinal = inv_lowE1[ifinal]
-                    print >> fcix, "%3d " % (low_ifinal+1,),
-                    if low_ifinal>=0:
+                    print("%3d " % (low_ifinal + 1,), end=" ", file=fcix)
+                    if low_ifinal >= 0:
                         ind0 = lowE[i][1]
                         ind1 = lowE[low_ifinal][1]
-                        print >> fcix, "%2d %2d" % (len(ind0), len(ind1)),
-                        Sp_i[low_ifinal+1] = i+1
-                        Sp_m[low_ifinal+1] = zeros((len(ind1),len(ind0)))
-                        for l0,i0 in enumerate(ind0):
-                            for l1,j0 in enumerate(ind1):
-                                x = rS_minus[ii][i0,j0]
-                                if abs(x)<1e-10: x=0.0
-                                Sp_m[low_ifinal+1][l1,l0] = x
-                                print >> fcix, x,
+                        print("%2d %2d" % (len(ind0), len(ind1)), end=" ", file=fcix)
+                        Sp_i[low_ifinal + 1] = i + 1
+                        Sp_m[low_ifinal + 1] = zeros((len(ind1), len(ind0)))
+                        for l0, i0 in enumerate(ind0):
+                            for l1, j0 in enumerate(ind1):
+                                x = rS_minus[ii][i0, j0]
+                                if abs(x) < 1e-10:
+                                    x = 0.0
+                                Sp_m[low_ifinal + 1][l1, l0] = x
+                                print(x, end=" ", file=fcix)
                     else:
-                        print >> fcix, "%2d %2d" % (0, 0),
+                        print("%2d %2d" % (0, 0), end=" ", file=fcix)
                 else:
-                    print >> fcix, "%3d %2d %2d" % (0, 0, 0),
-                print >> fcix
+                    print("%3d %2d %2d" % (0, 0, 0), end=" ", file=fcix)
+                print(file=fcix)
 
-            #print >> fcix, '# S_plus'
+            # print >> fcix, '# S_plus'
             for i in range(len(lowE)):
-                print >> fcix, "%3d " % (i+1,),
-                if Sp_i.has_key(i+1):
-                    ifinal = Sp_i[i+1]
-                    M = Sp_m[i+1]
-                    print >> fcix, "%3d %2d %2d " % (ifinal,shape(M)[0], shape(M)[1]),
+                print("%3d " % (i + 1,), end=" ", file=fcix)
+                if i + 1 in Sp_i:
+                    ifinal = Sp_i[i + 1]
+                    M = Sp_m[i + 1]
+                    print(
+                        "%3d %2d %2d " % (ifinal, shape(M)[0], shape(M)[1]),
+                        end=" ",
+                        file=fcix,
+                    )
                     for i0 in range(shape(M)[0]):
                         for j0 in range(shape(M)[1]):
-                            print >> fcix, M[i0,j0],
-                    #print >> fcix
+                            print(M[i0, j0], end=" ", file=fcix)
+                    # print >> fcix
                 else:
-                    print >> fcix, "%3d %2d %2d" % (0, 0, 0),
-                print >> fcix
+                    print("%3d %2d %2d" % (0, 0, 0), end=" ", file=fcix)
+                print(file=fcix)
         #### NEW
-    if (OLD_CTQMC):
-        print >> fcix, '# Data for HB1'
+    if OLD_CTQMC:
+        print("# Data for HB1", file=fcix)
 
-        PrintAll=False
+        PrintAll = False
         if PrintAll:
-            print >> fcix, 1, len(pseudostates), len(bkeep), maxs
-            print >> fcix, '# ind   N   K   Jz size'
+            print(1, len(pseudostates), len(bkeep), maxs, file=fcix)
+            print("# ind   N   K   Jz size", file=fcix)
 
-            for ii,iwp in enumerate(pseudostates):
+            for ii, iwp in enumerate(pseudostates):
                 iw = iwp[0]
                 ip = iwp[1]
                 wstate = wstates[iw]
-                print >> fcix, "%3d  %3d  %2d %2d %4.1f %2d " % (ii+1, inv_lowE1[ii]+1, sum(wstate[0]), 0, sum(wstate[1])/2., len(Enes[ii])),
+                print(
+                    "%3d  %3d  %2d %2d %4.1f %2d "
+                    % (
+                        ii + 1,
+                        inv_lowE1[ii] + 1,
+                        sum(wstate[0]),
+                        0,
+                        sum(wstate[1]) / 2.0,
+                        len(Enes[ii]),
+                    ),
+                    end=" ",
+                    file=fcix,
+                )
                 for ib in bkeep:
-                    print >> fcix, "%3d" % (iFinal[ii,ib]+1),
-                print >> fcix, "  ",
+                    print("%3d" % (iFinal[ii, ib] + 1), end=" ", file=fcix)
+                print("  ", end=" ", file=fcix)
                 for iq in range(len(Enes[ii])):
-                    print >> fcix, Enes[ii][iq],
-                print >> fcix, "  ",
+                    print(Enes[ii][iq], end=" ", file=fcix)
+                print("  ", end=" ", file=fcix)
                 for iq in range(len(Enes[ii])):
-                    print >> fcix, 0,
-                print >> fcix, "  ",
-                print >> fcix
+                    print(0, end=" ", file=fcix)
+                print("  ", end=" ", file=fcix)
+                print(file=fcix)
 
-            print >> fcix, '# matrix elements'
+            print("# matrix elements", file=fcix)
 
             for ii in range(len(pseudostates)):
                 for ib in bkeep:
-                        print >> fcix, "%3d %3d " % (ii+1, iFinal[ii,ib]+1),
-                        ffp = zeros(len(Enes[ii]),dtype=float)
-                        if iFinal[ii,ib]>=0:
-                            (dim0, dim1) = shape(rFKP[ii][ib])
-                            print >> fcix, "%2d %2d" % (dim0,dim1),
-                            for i0 in range(dim0):
-                                for j0 in range(dim1):
-                                    x = rFKP[ii][ib][i0,j0]
-                                    if abs(x.imag)<1e-4 or PrintReal:
-                                        print >> fcix, x.real,
-                                    else:
-                                        print >> fcix, x,
-                            for i0 in range(dim0):
-                                dsum=0
-                                for j0 in range(dim1):
-                                    dsum += abs(rFKP[ii][ib][i0][j0])**2
-                                ffp[i0] += dsum
-                        else:
-                            print >> fcix, "%2d %2d" % (0, 0),
-                        print >> fcix
+                    print("%3d %3d " % (ii + 1, iFinal[ii, ib] + 1), end=" ", file=fcix)
+                    ffp = zeros(len(Enes[ii]), dtype=float)
+                    if iFinal[ii, ib] >= 0:
+                        (dim0, dim1) = shape(rFKP[ii][ib])
+                        print("%2d %2d" % (dim0, dim1), end=" ", file=fcix)
+                        for i0 in range(dim0):
+                            for j0 in range(dim1):
+                                x = rFKP[ii][ib][i0, j0]
+                                if abs(x.imag) < 1e-4 or PrintReal:
+                                    print(x.real, end=" ", file=fcix)
+                                else:
+                                    print(x, end=" ", file=fcix)
+                        for i0 in range(dim0):
+                            dsum = 0
+                            for j0 in range(dim1):
+                                dsum += abs(rFKP[ii][ib][i0][j0]) ** 2
+                            ffp[i0] += dsum
+                    else:
+                        print("%2d %2d" % (0, 0), end=" ", file=fcix)
+                    print(file=fcix)
         else:
-            print >> fcix, 1, len(lowE), nbaths, low_maxsize
-            print >> fcix, '# ind   N   K   Jz size'
+            print(1, len(lowE), nbaths, low_maxsize, file=fcix)
+            print("# ind   N   K   Jz size", file=fcix)
 
             for i in range(len(lowE)):
                 ii = lowE[i][0]
@@ -3069,44 +2808,49 @@ if __name__ == '__main__':
                 ip = iwp[1]
                 wstate = wstates[iw]
                 if op.Q3d:
-                    Mz = sum(wstate[1])/2.
-                    gs=wstate[2][ip]
+                    Mz = sum(wstate[1]) / 2.0
+                    gs = wstate[2][ip]
                 else:
-                    gs=wstate[2][ip]
+                    gs = wstate[2][ip]
                     Mz = op.Mz(gs)
-                print >> fcix, "%3d %3d  %2d %2d %6.3f %2d " % (i+1, i+1, sum(wstate[0]), 0, Mz, len(lowE[i][1])),
+                print(
+                    "%3d %3d  %2d %2d %6.3f %2d "
+                    % (i + 1, i + 1, sum(wstate[0]), 0, Mz, len(lowE[i][1])),
+                    end=" ",
+                    file=fcix,
+                )
                 for ib in bkeep:
-                    ifinal = iFinal[ii,ib]
-                    print >> fcix, "%3d" % (inv_lowE1[ifinal]+1),
-                print >> fcix, "  ",
+                    ifinal = iFinal[ii, ib]
+                    print("%3d" % (inv_lowE1[ifinal] + 1), end=" ", file=fcix)
+                print("  ", end=" ", file=fcix)
                 for iq in lowE[i][1]:
-                    print >> fcix, "%10.6f" % (Enes[ii][iq],),
-                print >> fcix, "  ",
+                    print("%10.6f" % (Enes[ii][iq],), end=" ", file=fcix)
+                print("  ", end=" ", file=fcix)
                 for iq in lowE[i][1]:
-                    print >> fcix, S2ws[ii][iq],
-                if CoulombF[:5] == 'Ising':
-                    print >> fcix, "  # ", op.printn(gs),
-                print >> fcix
+                    print(S2ws[ii][iq], end=" ", file=fcix)
+                if CoulombF[:5] == "Ising":
+                    print("  # ", op.printn(gs), end=" ", file=fcix)
+                print(file=fcix)
 
-            print >> fcix, '# matrix elements'
+            print("# matrix elements", file=fcix)
 
             for i in range(len(lowE)):
                 ii = lowE[i][0]
                 for ib in bkeep:
-                    ifinal = iFinal[ii,ib]
+                    ifinal = iFinal[ii, ib]
                     low_ifinal = inv_lowE1[ifinal]
-                    print >> fcix, "%3d %3d " % (i+1, low_ifinal+1),
-                    if low_ifinal>=0:
+                    print("%3d %3d " % (i + 1, low_ifinal + 1), end=" ", file=fcix)
+                    if low_ifinal >= 0:
                         ind0 = lowE[i][1]
                         ind1 = lowE[low_ifinal][1]
-                        print >> fcix, "%2d %2d" % (len(ind0), len(ind1)),
+                        print("%2d %2d" % (len(ind0), len(ind1)), end=" ", file=fcix)
                         for i0 in ind0:
                             for j0 in ind1:
-                                x = rFKP[ii][ib][i0,j0]
-                                if abs(x.imag)<1e-4 or PrintReal:
-                                    print >> fcix, x.real,
+                                x = rFKP[ii][ib][i0, j0]
+                                if abs(x.imag) < 1e-4 or PrintReal:
+                                    print(x.real, end=" ", file=fcix)
                                 else:
-                                    print >> fcix, x,
+                                    print(x, end=" ", file=fcix)
                     else:
-                        print >> fcix, "%2d %2d" % (0, 0),
-                    print >> fcix
+                        print("%2d %2d" % (0, 0), end=" ", file=fcix)
+                    print(file=fcix)

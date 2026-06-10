@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import os,sys
 
 # this is a class which defines default program parameters and allows them to be updated 
@@ -11,12 +11,12 @@ class inputs:
     for i in input.split():
       if not ['int','float','str'].count(i.split("=")[-1]):
         try:exec('self.%s=%s'%tuple(i.split("="))) 
-        except: print "bad input %s given in the inputs class"%i; sys.exit()
+        except: print("bad input %s given in the inputs class"%i); sys.exit()
     self.allv=[s.split("=")[0] for s in input.split()]
   def update(self,list,pre_exe=''):
     exec(pre_exe)
     if type(list)==type(''):
-      if not os.path.isfile(list):print "%s is not a file..."%file;sys.exit()
+      if not os.path.isfile(list):print("%s is not a file..."%file);sys.exit()
       else: list=open(list).read().replace("\n"," ").split()
 
     for j,jj in enumerate(list):
@@ -32,19 +32,19 @@ class inputs:
             if type(eval('self.'+ii[0]))==type(''):   exec('self.%s="%s"'%tuple(ii))
             elif type(eval('self.'+ii[0]))==type(1):  exec('self.%s=int(%s)'%tuple(ii))
             elif type(eval('self.'+ii[0]))==type(1.): exec('self.%s=float(%s)'%tuple(ii))
-          except: print "error executing command line input paramters %s=%s"%tuple(ii); sys.exit()
+          except: print("error executing command line input paramters %s=%s"%tuple(ii)); sys.exit()
         elif [s for s in self.__input if s.split("=")[0]==ii[0]]:
           temp=[s.split("=") for s in self.__input if s.split("=")[0]==ii[0]][0]
           try:
             if temp[-1]=='str':     exec('self.%s="%s"'%tuple(ii))
             elif temp[-1]=='int':   exec('self.%s=int(%s)'%tuple(ii))
             elif temp[-1]=='float': exec('self.%s=float(%s)'%tuple(ii))
-          except: print "error executing command line input paramters %s=%s"%tuple(ii); sys.exit()
+          except: print("error executing command line input paramters %s=%s"%tuple(ii)); sys.exit()
         else: 
-          print """input variable "%s" not found \n\noptions are: """%ii[0], 
-          print "  ".join([s for s in dir(self) if s[0:2]!="__" and s!='update']);sys.exit()
+          print("""input variable "%s" not found \n\noptions are: """%ii[0], end=' ') 
+          print("  ".join([s for s in dir(self) if s[0:2]!="__" and s!='update']));sys.exit()
       else:
-        if list[j-1][0]!='-': print 'improper entry: %s not preceded by -<variable>'%jj
+        if list[j-1][0]!='-': print('improper entry: %s not preceded by -<variable>'%jj)
   def report(self,inp='inputs.out'):
     if inp:OUT=open(inp,'w')
     else:OUT=sys.stdout
@@ -75,16 +75,16 @@ def update_dict(dict,comline=sys.argv):
   for i in comline:
     if i.count("=")==1:
       a1=i.split("=")[0]; a2=i.split("=")[1]   # too dangerous .replace("_"," ")
-      if dict.has_key(a1):
+      if a1 in dict:
          if type(dict[a1])==type(1.0): dict[a1]=float(a2)
          if type(dict[a1])==type(1): dict[a1]=int(a2)
          if type(dict[a1])==type("a"): dict[a1]=str(a2)
          if type(dict[a1])==type(True): dict[a1]=a2
       else: 
-         print "variable %s not found in dictionary"%a1; tt=dict.keys();tt.sort() 
-         for i in tt:print i
+         print("variable %s not found in dictionary"%a1); tt=list(dict.keys());tt.sort() 
+         for i in tt:print(i)
          sys.exit()
-    elif i.count('=')>1: print "too many = signs in %s"%i; sys.exit()
+    elif i.count('=')>1: print("too many = signs in %s"%i); sys.exit()
   return dict
 
 def latex_table(inp,cap='',cstyle=0,rstyle=0):
@@ -102,7 +102,7 @@ def latex_table(inp,cap='',cstyle=0,rstyle=0):
   inp=[s.split() for s in inp.strip().split("\n")]
   nf=len(inp[0])
   temp=[s for s in inp if len(s)!=nf]
-  if temp:print "table rows must have same length...\n",temp;sys.exit()
+  if temp:print("table rows must have same length...\n",temp);sys.exit()
   if   cstyle==0:cols=' c '*nf
   elif cstyle==1:cols=' c | '+' c '*(nf-1)
   elif cstyle==2:cols= " | ".join(['c']*nf)

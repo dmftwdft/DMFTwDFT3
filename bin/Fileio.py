@@ -4,11 +4,12 @@ import re
 import sys
 
 from scipy import *
+from numpy import array, zeros
 
 
 def Read_complex_multilines(D_name, skipline=0):
-    """ This function reads Sig.out file """
-    print("Reading a file: %s " % D_name)
+    """This function reads Sig.out file"""
+    print("Reading a file ", D_name)
     fi = open(D_name, "r")
     for i in range(skipline):
         fi.readline()
@@ -17,17 +18,18 @@ def Read_complex_multilines(D_name, skipline=0):
     m = len(lines[0].split())
     Nom = len(lines)
     om_data = zeros(Nom, dtype=float)
-    Data = zeros((int((m - 1) / 2), Nom), dtype=complex)
+    orbital_count = (m - 1) // 2
+    Data = zeros((orbital_count, Nom), dtype=complex)
     for iom, line in enumerate(lines):
         l = line.split()
         om_data[iom] = float(l[0])
-        for ib in range(int((m - 1) / 2)):
+        for ib in range(orbital_count):
             Data[ib, iom] = complex(float(l[1 + ib * 2]), float(l[2 + ib * 2]))
     return om_data, Data
 
 
 def Read_float_multilines(D_name):
-    """ This function reads Sig.out file """
+    """This function reads Sig.out file"""
     print("Reading a file ", D_name)
     fi = open(D_name, "r")
     lines = fi.readlines()
@@ -44,7 +46,7 @@ def Read_float_multilines(D_name):
 
 
 def Read_float(D_name):
-    """ This function reads Sig.out file """
+    """This function reads Sig.out file"""
     print("Reading a file ", D_name)
     fi = open(D_name, "r")
     lines = fi.readlines()
@@ -54,7 +56,7 @@ def Read_float(D_name):
 
 
 def Read_complex_Data(D_name):
-    """ This function reads Sig.out file """
+    """This function reads Sig.out file"""
     print("Reading a file ", D_name)
     fi = open(D_name, "r")
     line = fi.readline()
@@ -73,18 +75,19 @@ def Read_complex_Data(D_name):
     Nom = len(lines)
     m = len(lines[0].split())
     om_data = zeros(Nom, dtype=float)
-    Data = zeros(((m - 1) / 2, Nom), dtype=complex)
+    orbital_count = (m - 1) // 2
+    Data = zeros((orbital_count, Nom), dtype=complex)
     iom = 0
     for line in lines:
         l = line.split()
         om_data[iom] = float(l[0])
-        for ib in range((m - 1) / 2):
+        for ib in range(orbital_count):
             Data[ib, iom] = complex(float(l[1 + ib * 2]), float(l[2 + ib * 2]))
         iom = iom + 1
     if iom != Nom:
         print("Something is wrong!")
         sys.exit(1)
-    if len(mom) != (m - 1) / 2:
+    if len(mom) != orbital_count:
         print("Something is wrong!")
         sys.exit(1)
 
@@ -95,9 +98,8 @@ def Print_complex(data, mesh, filename):
     n1 = len(mesh)
     fi = open(filename, "w")
     for i in range(n1):
-        f.write("%.14f " % (mesh[i]))
-        f.write("%.14f %.14f " % (data[i].real, data[i].imag))
-    fi.close()
+        print("%.14f " % (mesh[i]), end=" ", file=fi)
+        print("%.14f %.14f " % (data[i].real, data[i].imag), file=fi)
 
 
 def Print_complex_multilines(data, mesh, filename, headers=[]):
@@ -105,23 +107,25 @@ def Print_complex_multilines(data, mesh, filename, headers=[]):
     n1 = len(mesh)
     fi = open(filename, "w")
     for header in headers:
-        fi.write("%s \n" % header)
+        print(header, file=fi)
     for i in range(n1):
         for j in range(n0):
             if j == 0:
-                fi.write("%20.15f " % (mesh[i]))
-            fi.write("%20.15f %20.15f " % (data[j, i].real, data[j, i].imag))
-        fi.write("\n")
-    fi.close()
+                print("%20.15f " % (mesh[i]), end=" ", file=fi)
+            print(
+                "%20.15f %20.15f " % (data[j, i].real, data[j, i].imag),
+                end=" ",
+                file=fi,
+            )
+        print("", file=fi)
 
 
 def Print_float(data, filename):
     n0 = len(data)
     fi = open(filename, "w")
     for j in range(n0):
-        fi.write("%.14f " % (data[j]))
-    fi.write("")
-    fi.close()
+        print("%.14f " % (data[j]), end=" ", file=fi)
+    print("", file=fi)
 
 
 def Read_float(filename):
@@ -132,28 +136,28 @@ def Read_float(filename):
 
 def Create_dmft_params(p, pC, N_atoms, atm_idx, sym_idx):
     f = open("dmft_params.dat", "w")
-    f.write("# Number of k-points in Wannier basis=\n")
-    f.write("%d %d %d\n " % (p["q"][0], p["q"][1], p["q"][2]))
-    f.write("# Total number of electrons=\n")
-    f.write("%d\n" % p["n_tot"])
+    print("# Number of k-points in Wannier basis=", file=f)
+    print(p["q"][0], p["q"][1], p["q"][2], file=f)
+    print("# Total number of electrons=", file=f)
+    print(p["n_tot"], file=f)
     #   print >> f, "# Temperature [eV]="
     #   print >> f, 1.0/pC['beta'][0]
-    f.write("# Number of om points for k-sum\n")
-    f.write("%d\n" % p["noms"])
-    f.write("# Number of iterations for mu\n")
-    f.write("%d\n" % p["mu_iter"])
-    f.write("# Number of total spin\n")
-    f.write("%d\n" % p["nspin"])
-    f.write("# Number of total correlated atoms\n")
-    f.write("%d\n" % N_atoms)
-    f.write("# Number of correlated orbitals per atom\n")
-    sym_indx_spin = len(sym_idx[atm_idx[0]]) / p["nspin"]
-    f.write("%d\n" % sym_indx_spin)
-    f.write("# Orbital index for the self-energy at each atom\n")
+    print("# Number of om points for k-sum", file=f)
+    print(p["noms"], file=f)
+    print("# Number of iterations for mu", file=f)
+    print(p["mu_iter"], file=f)
+    print("# Number of total spin", file=f)
+    print(p["nspin"], file=f)
+    print("# Number of total correlated atoms", file=f)
+    print(N_atoms, file=f)
+    print("# Number of correlated orbitals per atom", file=f)
+    #   print >> f, len(sym_idx[atm_idx[0]])
+    print(len(sym_idx[atm_idx[0]]) / p["nspin"], file=f)
+    print("# Orbital index for the self-energy at each atom", file=f)
     for i in range(N_atoms):
         for j in range(len(sym_idx[atm_idx[i]])):
-            f.write("%d " % sym_idx[atm_idx[i]][j])
-        f.write("\n")
+            print(sym_idx[atm_idx[i]][j], end=" ", file=f)
+        print("", file=f)
     f.close()
 
 
@@ -165,82 +169,82 @@ def Create_INPUT(p, pC, TB, T_high, noms_high, LFORCE=".FALSE."):
             atm_idx.append(idx)
         idx += 1
     f = open("VASP.input", "w")
-    f.write("%s" % LFORCE)
-    f.write("%s" % TB.LHF)
-    f.write("%d" % p["n_tot"])
-    f.write("%d" % p["nspin"])
-    f.write("%d" % p["nfine"])
-    f.write("%s" % TB.ncor_orb)
-    f.write("%s" % TB.max_cor_orb)
+    print(LFORCE, file=f)
+    print(TB.LHF, file=f)
+    print(p["n_tot"], file=f)
+    print(p["nspin"], file=f)
+    print(p["nfine"], file=f)
+    print(TB.ncor_orb, file=f)
+    print(TB.max_cor_orb, file=f)
     if TB.LHF == ".TRUE.":
-        f.write("1")
+        print("1", file=f)
     else:
-        f.write("%d" % p["noms"])
+        print(p["noms"], file=f)
     if TB.LHF == ".TRUE.":
-        f.write("1")
+        print("1", file=f)
     else:
-        f.write("%f" % noms_high)
+        print(noms_high, file=f)
     if TB.LHF == ".TRUE.":
-        f.write("1")
+        print("1", file=f)
     else:
-        f.write("%d " % (p["noms"] + p["nomlog"]))
-    f.write("%f" % (1.0 / pC["beta"][0]))
-    f.write("%f" % T_high)
+        print(p["noms"] + p["nomlog"], file=f)
+    print(1.0 / pC["beta"][0], file=f)
+    print(T_high, file=f)
     for i in range(len(atm_idx)):
-        f.write("%s " % atm_idx[i])
-    f.write("")
+        print(atm_idx[i], end=" ", file=f)
+    print("", file=f)
     for i in range(len(atm_idx)):
-        f.write("%f" % p["U"][atm_idx[i] - 1])
-    f.write("")
+        print(p["U"][atm_idx[i] - 1], end=" ", file=f)
+    print("", file=f)
     for i in range(len(atm_idx)):
-        f.write("%f" % p["J"][atm_idx[i] - 1])
-    f.write("")
+        print(p["J"][atm_idx[i] - 1], end=" ", file=f)
+    print("", file=f)
     for i in range(len(atm_idx)):
-        f.write("%f" % p["alpha"][atm_idx[i] - 1])
-    f.write("")
+        print(p["alpha"][atm_idx[i] - 1], end=" ", file=f)
+    print("", file=f)
     f.close()
     if TB.LHF == ".FALSE.":
         f = open("ksum.input", "w")
-        f.write("%d %d %d " % (p["q"][0], p["q"][1], p["q"][2]))
-        f.write("%d %d" % (["noms"], (p["noms"] + p["nomlog"])))
-        f.write("%d" % p["nspin"])
-        f.write("%d" % TB.ncor_orb)
-        f.write("%d" % TB.max_cor_orb)
+        print(p["q"][0], p["q"][1], p["q"][2], file=f)
+        print(p["noms"], p["noms"] + p["nomlog"], file=f)
+        print(p["nspin"], file=f)
+        print(TB.ncor_orb, file=f)
+        print(TB.max_cor_orb, file=f)
         for i in range(len(atm_idx)):
-            f.write("%s" % atm_idx[i])
-        f.write("")
-        f.write("%f" % 1.0 / pC["beta"][0])
+            print(atm_idx[i], end=" ", file=f)
+        print("", file=f)
+        print(1.0 / pC["beta"][0], file=f)
         #      print >> f, p['Nd_f']
-        f.write("%d" % p["n_tot"])
-        f.write("%d" % p["mu_iter"])
-        f.write("%f" % p["mix_sig"])
+        print(p["n_tot"], file=f)
+        print(p["mu_iter"], file=f)
+        print(p["mix_sig"], file=f)
         for i in range(len(atm_idx)):
-            f.write("%f" % p["U"][atm_idx[i] - 1])
-        f.write("")
+            print(p["U"][atm_idx[i] - 1], end=" ", file=f)
+        print("", file=f)
         for i in range(len(atm_idx)):
-            f.write("%f" % p["alpha"][atm_idx[i] - 1])
-        f.write("")
+            print(p["alpha"][atm_idx[i] - 1], end=" ", file=f)
+        print("", file=f)
         for i in range(len(atm_idx)):
-            f.write("%f" % p["J"][atm_idx[i] - 1])
-        f.write("")
+            print(p["J"][atm_idx[i] - 1], end=" ", file=f)
+        print("", file=f)
         f.close()
     else:
         f = open("ksum.input", "w")
-        f.write("%d" % p["nspin"])
-        f.write("%d" % TB.ncor_orb)
-        f.write("%d" % TB.max_cor_orb)
-        f.write("%d" % p["n_tot"])
-        f.write("%d" % p["mu_iter"])
+        print(p["nspin"], file=f)
+        print(TB.ncor_orb, file=f)
+        print(TB.max_cor_orb, file=f)
+        print(p["n_tot"], file=f)
+        print(p["mu_iter"], file=f)
         for i in range(len(atm_idx)):
-            f.write("%s" % atm_idx[i])
-        f.write("")
+            print(atm_idx[i], end=" ", file=f)
+        print("", file=f)
         for i in range(len(atm_idx)):
-            f.write("%f" % p["U"][atm_idx[i] - 1])
-        f.write("")
+            print(p["U"][atm_idx[i] - 1], end=" ", file=f)
+        print("", file=f)
         for i in range(len(atm_idx)):
-            f.write("%f" % p["alpha"][atm_idx[i] - 1])
-        f.write("")
+            print(p["alpha"][atm_idx[i] - 1], end=" ", file=f)
+        print("", file=f)
         for i in range(len(atm_idx)):
-            f.write("%f" % p["J"][atm_idx[i] - 1])
-        f.write("")
+            print(p["J"][atm_idx[i] - 1], end=" ", file=f)
+        print("", file=f)
         f.close()

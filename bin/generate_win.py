@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import VASP
 import Struct
 
@@ -15,7 +15,7 @@ if __name__ == '__main__':
 
   TB=Struct.TBstructure('POSCAR',p['atomnames'],p['orbs'])
   TB.Compute_cor_idx(p['cor_at'],p['cor_orb'])
-  print TB.TB_orbs
+  print(TB.TB_orbs)
   DFT=VASP.VASP_class()
   DFT.NBANDS=72
   DFT.Create_win(TB,p['atomnames'],p['orbs'],p['L_rot'],DFT.NBANDS,DFT.EFERMI+p['ewin'][0],DFT.EFERMI+p['ewin'][1])

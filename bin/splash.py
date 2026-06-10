@@ -1,11 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-version = "1.0"
-date = "April 23, 2020"
+import sys
+
+version = "2.0"
+date = "Jun 8, 2026"
 
 
 def welcome():
-
     art = """
  ____  __  __ _____ _____          ____  _____ _____
 |  _ \|  \/  |  ___|_   _|_      _|  _ \|  ___|_   _|
@@ -13,20 +14,24 @@ def welcome():
 | |_| | |  | |  _|   | |  \ V  V /| |_| |  _|   | |
 |____/|_|  |_|_|     |_|   \_/\_/ |____/|_|     |_|
 
-Python 3.x version.
     """
-
+    pversion = ".".join(map(str, sys.version_info[:3]))
     print(art)
+    print(("Python 3 version running on Python %s." % pversion))
     print(
-        "--- An open-source code combining Dynamical Mean Field Theory with various Density Functional Theory packages. ---"
+        "\n--- An open-source code combining Dynamical Mean Field Theory with various Density Functional Theory packages. ---"
     )
-    print("\nVersion %s updated on %s\n" % (version, date))
+    print(("\nVersion %s updated on %s.\n" % (version, date)))
     print(
-        "Please cite:\nVijay Singh, Uthpala Herath, Benny Wah, Xingyu Liao, Aldo H. Romero, Hyowon Park,. DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various Density Functional Theory packages,. arXiv:2002.00068 [cond-mat.str-el].\n"
+        "Please cite:\n \
+Vijay Singh, Uthpala Herath, Benny Wah, Xingyu Liao, Aldo H. Romero, Hyowon Park.,\n \
+DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various Density Functional Theory packages.,\n \
+Computer Physics Communications 261 (2021):107778.\n"
     )
 
-    print(
-        "----------------------------------------------------------------------------------------\n"
-    )
+    separator_art = """
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+        """
+    print(separator_art)
 
     return
