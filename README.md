@@ -3,6 +3,8 @@
 DMFTwDFT is an open-source, user-friendly framework to calculate electronic, vibrational and elastic properties in strongly
 correlated materials (SCM) using beyond-DFT methods such as DFT+U, DFT+Hybrids and DFT+DMFT (Dynamical Mean Field Theory) with a variety of different DFT codes. Currently supports VASP, Siesta and Quantum Espresso.
 
+![](docs/images/dmftwdft-hd.png)
+
 ## Features <br />
 
 ![](docs/images/welcome.jpg)
@@ -15,11 +17,13 @@ correlated materials (SCM) using beyond-DFT methods such as DFT+U, DFT+Hybrids a
 
 Please refer to the documentation.
 
-https://dmftwdft-project.github.io/DMFTwDFT/
+https://dmftwdft.github.io/DMFTwDFT3/
 
 **Quick Install:**
 
-Copy one of the bundled templates to `Makefile.in`, edit it for your machine, and run:
+Copy one of the templates in `config` to `Makefile.in` in the repo root, edit it for your machine, and run the setup.:
+
+E.g.,
 
 ```bash
 cp config/Makefile.in.gnu Makefile.in
@@ -30,30 +34,20 @@ Available templates:
 
 - `config/Makefile.in.gnu`: GNU compilers on Linux-style systems.
 - `config/Makefile.in.intel`: Intel oneAPI compilers.
-- `config/Makefile.in.mac`: macOS x86_64 conda/Python 2 environment, including Apple Silicon hosts running the conda environment under Rosetta.
-
-`setup.py` generates `sources/make.inc` from the root `Makefile.in` and then compiles the internal and external components.
+- `config/Makefile.in.mac`: macOS conda environment using GNU Fortran, MPI, BLAS/LAPACK, GSL and FFTW from the same conda environment.
 
 Recommended environments:
 
 - Linux: `mamba env create -f environment.yml`
 - macOS: `mamba env create -f environment.macos.yml`
 
-These environment files cover the Python 2 stack plus the key compiled/runtime dependencies we had to fix manually, including the GNU toolchain for `weave`, `libgfortran.so.3`, and `libxcrypt` on Linux.
-
 **Notes:**
 
-For GNU compilers, it is assumed that `liblapack.a`, `libblas.a` and GSL libraries are installed in the `/usr/local/lib/` directory. If not, modify `LALIB` and `GSLLIB` in `Makefile.in` to point to the correct location. Additionally, set compiler flags in `FFLAGSEXTRA`.
+- For GNU compilers, it is assumed that `liblapack.a`, `libblas.a` and GSL libraries are installed in the `/usr/local/lib/` directory. If not, modify `LALIB` and `GSLLIB` in `Makefile.in` to point to the correct location. Additionally, set compiler flags in `FFLAGSEXTRA`.
 
-The macOS profile uses `config/Makefile.in.mac`. Copy it to `Makefile.in` before running `python setup.py`. It is intended for an `osx-64` conda environment with Python 2 and matching x86_64 dependencies. Install the required compiler and libraries into the same conda environment, for example:
+- Keep every compiled component on the same architecture. On Apple Silicon, the provided `environment.macos.yml` creates a native `arm64` environment and `config/Makefile.in.mac` defaults to the native architecture. Build Wannier90, DMFTwDFT and any DFT interfaces against the same conda environment. Do not mix an `x86_64` Wannier90 binary with `arm64` conda BLAS/MPI libraries, or the reverse.
 
-```bash
-conda install -n dmft -c conda-forge/label/cf202003 gfortran_osx-64 gsl fftw
-```
-
-On Apple Silicon, avoid mixing `/opt/homebrew` ARM libraries with an `osx-64` conda Python environment. Use conda-provided x86_64 libraries for GSL, FFTW, BLAS and LAPACK. Runtime `atom_d.py` compilation on macOS uses Apple `clang`/`clang++` with the active macOS SDK to avoid incompatibilities between legacy Python 2 weave code and newer SDK headers.
-
-For Intel builds on Linux, the Python environment still comes from `environment.yml`; only the Fortran/MPI compiler stack is external and should come from your Intel oneAPI module or shell setup.
+- For Intel builds on Linux, the Python environment still comes from `environment.yml`; only the Fortran/MPI compiler stack is external and should come from your Intel oneAPI module or shell setup.
 
 ## Developers
 
