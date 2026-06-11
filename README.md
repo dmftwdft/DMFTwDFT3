@@ -1,7 +1,6 @@
 # DMFTwDFT3
 
-DMFTwDFT is an open-source, user-friendly framework to calculate electronic, vibrational and elastic properties in strongly
-correlated materials (SCM) using beyond-DFT methods such as DFT+U, DFT+Hybrids and DFT+DMFT (Dynamical Mean Field Theory) with a variety of different DFT codes. Currently supports VASP, Siesta and Quantum Espresso.
+DMFTwDFT is an open-source, user-friendly framework to calculate properties of strongly correlated materials (SCM) using DFT+DMFT (Dynamical Mean Field Theory) with a variety of different DFT codes. Currently supports VASP, Siesta and Quantum Espresso.
 
 ![](docs/images/dmftwdft-hd.png)
 
@@ -15,11 +14,9 @@ correlated materials (SCM) using beyond-DFT methods such as DFT+U, DFT+Hybrids a
 
 ## Installation and usage
 
-Please refer to the documentation.
+Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3/
 
-https://dmftwdft.github.io/DMFTwDFT3/
-
-**Quick Install:**
+**Quick Install**
 
 Copy one of the templates in `config` to `Makefile.in` in the repo root, edit it for your machine, and run the setup.:
 
@@ -30,18 +27,18 @@ cp config/Makefile.in.gnu Makefile.in
 python setup.py
 ```
 
-Available templates:
+**Available templates**
 
 - `config/Makefile.in.gnu`: GNU compilers on Linux-style systems.
 - `config/Makefile.in.intel`: Intel oneAPI compilers.
 - `config/Makefile.in.mac`: macOS conda environment using GNU Fortran, MPI, BLAS/LAPACK, GSL and FFTW from the same conda environment.
 
-Recommended environments:
+**Recommended environments**
 
 - Linux: `mamba env create -f environment.yml`
 - macOS: `mamba env create -f environment.macos.yml`
 
-**Notes:**
+**Notes**
 
 - For GNU compilers, it is assumed that `liblapack.a`, `libblas.a` and GSL libraries are installed in the `/usr/local/lib/` directory. If not, modify `LALIB` and `GSLLIB` in `Makefile.in` to point to the correct location. Additionally, set compiler flags in `FFLAGSEXTRA`.
 
@@ -90,19 +87,16 @@ Please post your questions on our forum: https://groups.google.com/d/forum/dmftw
 
 ## Acknowledgements
 
-We acknowledge the use of the following packages:
+We acknowledge the use of the following packages,
 
-- [Continuous time Quantum Monte Carlo (ctqmc)](http://hauleweb.rutgers.edu/tutorials/Tutorial0.html) through the eDMFT library.<br />
-
-The original implementation of the CTQMC solver is described in the following paper:
+\- [Continuous time Quantum Monte Carlo (ctqmc)](http://hauleweb.rutgers.edu/tutorials/Tutorial0.html) through the eDMFT library.<br />
 
 [1] Kristjan Haule, Phys. Rev. B 75, 155113 (2007).
-
-Free energy implementation :<br />
 [2] Kristjan Haule, Turan Birol, Phys. Rev. Lett. 115, 256402 (2015).
 
-- [Wannier90](http://www.wannier.org/)<br>
-  Wannier90 as a community code: new features and applications, G. Pizzi et al., J. Phys. Cond. Matt. 32, 165902 (2020)
+\- [Wannier90](http://www.wannier.org/)<br>
+
+[1] Wannier90 as a community code: new features and applications, G. Pizzi et al., J. Phys. Cond. Matt. 32, 165902 (2020)
 
 ## Changelog
 
