@@ -14,7 +14,7 @@ DMFTwDFT is an open-source, user-friendly framework to calculate properties of s
 
 ## Installation and usage
 
-Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3/
+Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3
 
 **Quick Install**
 
@@ -91,7 +91,7 @@ We acknowledge the use of the following packages,
 
 \- [Continuous time Quantum Monte Carlo (ctqmc)](http://hauleweb.rutgers.edu/tutorials/Tutorial0.html) through the eDMFT library.<br />
 
-[1] Kristjan Haule, Phys. Rev. B 75, 155113 (2007).
+[1] Kristjan Haule, Phys. Rev. B 75, 155113 (2007). <br />
 [2] Kristjan Haule, Turan Birol, Phys. Rev. Lett. 115, 256402 (2015).
 
 \- [Wannier90](http://www.wannier.org/)<br>
