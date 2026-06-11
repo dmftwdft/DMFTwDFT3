@@ -21,22 +21,24 @@
 
 CONDA_PREFIX ?= /Users/ukh/miniforge3/envs/dmft
 SDKROOT = $(shell xcrun --show-sdk-path)
+ARCH ?= $(shell uname -m)
+ARCHFLAGS = -arch $(ARCH)
 
 #------------- SERIAL VERSION ----------------------------------------------
 F90 = gfortran
 F77 = gfortran
-C++ = /usr/bin/clang++ -arch x86_64 -isysroot $(SDKROOT)
-CC  = /usr/bin/clang -arch x86_64 -isysroot $(SDKROOT)
+C++ = /usr/bin/clang++ $(ARCHFLAGS) -isysroot $(SDKROOT)
+CC  = /usr/bin/clang $(ARCHFLAGS) -isysroot $(SDKROOT)
 
 OPENMP = -fopenmp
-FFLAGSEXTRA = # -fallow-argument-mismatch
+FFLAGSEXTRA = -fallow-argument-mismatch
 FFLAGS = -O2  -ffree-form -ffree-line-length-none $(OPENMP) $(FFLAGSEXTRA)
 OFLAGS = -O2
 
-LALIB  =  -L$(CONDA_PREFIX)/lib -lblas -llapack
+LALIB  =  /opt/homebrew/opt/openblas/lib/libopenblas.dylib
 FFTLIB =  -L$(CONDA_PREFIX)/lib -lfftw3_omp -lfftw3
 FFTINC =  -I$(CONDA_PREFIX)/include
-GSLLIB =  -L$(CONDA_PREFIX)/lib -lgsl -lgslcblas
+GSLLIB =  $(CONDA_PREFIX)/lib/libgsl.dylib $(CONDA_PREFIX)/lib/libgslcblas.dylib
 GSLINC =  -I$(CONDA_PREFIX)/include
 PIC    =  -fPIC
 WFOPT  = -O2  -ffree-form -ffree-line-length-none $(OPENMP)  $(FFTINC)
@@ -48,17 +50,17 @@ F2PY_LAPACK = --link-lapack_opt
 #------------- PARALLEL VERSION --------------------------------------------
 Fmpi_define =  -D_MPI
 
-PF90 = mpif90
-PC++ = /usr/bin/clang++ -arch x86_64 -isysroot $(SDKROOT) -I$(CONDA_PREFIX)/include -L$(CONDA_PREFIX)/lib -Wl,-rpath,$(CONDA_PREFIX)/lib -Wl,-syslibroot,$(SDKROOT) -Wl,-flat_namespace -Wl,-commons,use_dylibs
-PCC  = /usr/bin/clang -arch x86_64 -isysroot $(SDKROOT) -I$(CONDA_PREFIX)/include -L$(CONDA_PREFIX)/lib -Wl,-rpath,$(CONDA_PREFIX)/lib -Wl,-syslibroot,$(SDKROOT) -Wl,-flat_namespace -Wl,-commons,use_dylibs
+PF90 = /opt/homebrew/bin/mpifort
+PC++ = /opt/homebrew/bin/mpicxx -I/opt/homebrew/opt/open-mpi/include $(ARCHFLAGS) -isysroot $(SDKROOT) -I$(CONDA_PREFIX)/include -Wl,-rpath,$(CONDA_PREFIX)/lib -Wl,-syslibroot,$(SDKROOT)
+PCC  = /opt/homebrew/bin/mpicc -I/opt/homebrew/opt/open-mpi/include $(ARCHFLAGS) -isysroot $(SDKROOT) -I$(CONDA_PREFIX)/include -Wl,-rpath,$(CONDA_PREFIX)/lib -Wl,-syslibroot,$(SDKROOT)
 
 PFLAGS   = -D_MPI -DMPICH_IGNORE_CXX_SEEK -O3 #-restrict -ipo -no-prec-div
 
-LLIBS = $(LALIB) -framework Accelerate
-PLIBS = $(LLIBS) $(GSLLIB) -L$(CONDA_PREFIX)/lib -lmpicxx -lmpi -lpmpi
+LLIBS = $(LALIB)
+PLIBS = $(CONDA_PREFIX)/lib/libopenblas.0.dylib $(GSLLIB)
 
 #
-CMP = env SETUPTOOLS_USE_DISTUTILS=stdlib SDKROOT=$(shell xcrun --show-sdk-path) CC=/usr/bin/clang CXX=/usr/bin/clang++ F77=gfortran F90=gfortran FC=gfortran FFLAGS="-arch x86_64 -fPIC -O3 -funroll-loops" CFLAGS="-arch x86_64 -isysroot $(shell xcrun --show-sdk-path)" LDFLAGS="-undefined dynamic_lookup -bundle -arch x86_64 -Wl,-syslibroot,$(shell xcrun --show-sdk-path)" python -m numpy.f2py --opt='-O2' --fcompiler=gnu95   # fortran to python converter
+CMP = env SETUPTOOLS_USE_DISTUTILS=stdlib SDKROOT=$(shell xcrun --show-sdk-path) CC=/usr/bin/clang CXX=/usr/bin/clang++ F77=gfortran F90=gfortran FC=gfortran FFLAGS="$(ARCHFLAGS) -fPIC -O3 -funroll-loops" CFLAGS="$(ARCHFLAGS) -isysroot $(shell xcrun --show-sdk-path)" LDFLAGS="-undefined dynamic_lookup -bundle $(ARCHFLAGS) -Wl,-syslibroot,$(shell xcrun --show-sdk-path)" python -m numpy.f2py --opt='-O2' --fcompiler=gnu95   # fortran to python converter
 CMPLIBS  = --f90flags='-fopenmp ' --opt='-Ofast' --link-lapack_opt
 CMPLIBS2 = --f90flags=' $(OPENMP) ' $(CMPLIBS)
 #

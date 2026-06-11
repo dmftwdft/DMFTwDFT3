@@ -363,7 +363,7 @@ contains
     character(len=*), intent(in) :: error_msg
 
 #ifdef MPI
-    character(len=50) :: filename
+    character(len=maxlen) :: filename
     integer           :: stderr, ierr, whoami, num_nodes
 
     call mpi_comm_rank(mpi_comm_world, whoami, ierr)

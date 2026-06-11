@@ -47,7 +47,10 @@ def read_makefile_vars(makefile_path):
             stripped = line.strip()
             if not stripped or stripped.startswith("#") or "=" not in line:
                 continue
-            key, value = line.split("=", 1)
+            if "?=" in line:
+                key, value = line.split("?=", 1)
+            else:
+                key, value = line.split("=", 1)
             values[key.strip()] = value.split("#", 1)[0].rstrip()
     return values
 
@@ -77,7 +80,16 @@ def write_internal_make_inc(base_makefile_path, output_path):
 
     lines = [
         "# Auto-generated from ../Makefile.in by setup.py.",
+        "CONDA_PREFIX = %s" % values.get("CONDA_PREFIX", ""),
+        "SDKROOT = %s" % values.get("SDKROOT", ""),
+        "ARCH = %s" % values.get("ARCH", ""),
+        "ARCHFLAGS = %s" % values.get("ARCHFLAGS", ""),
+        "OPENMP = %s" % values.get("OPENMP", ""),
+        "FFLAGSEXTRA = %s" % values.get("FFLAGSEXTRA", ""),
+        "",
         "F90 = %s" % f90,
+        "AR = %s" % values.get("AR", "ar").strip(),
+        "ARFLAGS = %s" % values.get("ARFLAGS", "rcs").strip(),
         "COMMS=%s" % comms,
         "MPIF90=%s" % mpif90,
         "CMP = %s" % cmp_value,
@@ -119,22 +131,23 @@ def stage_external_sources(edmft_source, destination, edmft_ref=None):
 
 def write_edmft_makefile(base_makefile_path, edmft_src_dir):
     """Creates the Makefile.in expected by the newer eDMFT tree."""
+    values = read_makefile_vars(base_makefile_path)
     with open(base_makefile_path, "r") as fp:
         makefile = fp.read().rstrip() + "\n"
 
     include_dir = os.path.join(edmft_src_dir, "includes")
     python_include = get_paths()["include"]
     safe_f2py_fflags = "--f90flags='-fopenmp -O2'"
+    pybnd_link = "-bundle -undefined dynamic_lookup" if sys.platform == "darwin" else "-shared"
 
     makefile += "DESTDIR = bin\n"
-    # Keep f2py's C/C++ wrapper build on the GNU toolchain. Mixing icx/icpx
-    # with gfortran here leaves unresolved Intel runtime symbols in gaunt.so.
-    makefile += "CMP = env SETUPTOOLS_USE_DISTUTILS=stdlib CC={0} CXX={1} FC=gfortran F77=gfortran F90=gfortran NPY_DISTUTILS_APPEND_FLAGS=1 {2} -m numpy.f2py --opt='-O2' --fcompiler=gnu95\n".format(
-        "gcc", "g++", sys.executable
-    )
+    if "CMP" not in values:
+        makefile += "CMP = env SETUPTOOLS_USE_DISTUTILS=stdlib CC=gcc CXX=g++ FC=gfortran F77=gfortran F90=gfortran {0} -m numpy.f2py --opt='-O2' --fcompiler=gnu95\n".format(
+            sys.executable
+        )
     makefile += "F2PL = {0}\n".format(safe_f2py_fflags)
-    makefile += "PYBND = -I{0} -I{1} -shared -std=c++11 -fPIC\n".format(
-        include_dir, python_include
+    makefile += "PYBND = -I{0} -I{1} {2} -std=c++11 -fPIC\n".format(
+        include_dir, python_include, pybnd_link
     )
 
     with open(os.path.join(edmft_src_dir, "Makefile.in"), "w") as fp:

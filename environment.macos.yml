@@ -11,7 +11,7 @@ dependencies:
   - pybind11
   - mpi4py
   - git
-  - gfortran_osx-64
+  - gfortran_osx-arm64
   - mpich
   - mpi
   - libblas

@@ -28,7 +28,7 @@ C++ = g++
 CC  = gcc
 
 OPENMP = -fopenmp
-FFLAGSEXTRA = # -fallow-argument-mismatch
+FFLAGSEXTRA = -fallow-argument-mismatch
 FFLAGS = -O2  -ffree-form -ffree-line-length-none $(OPENMP) $(FFLAGSEXTRA)
 OFLAGS = -O2
 
