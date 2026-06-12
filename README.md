@@ -27,6 +27,8 @@ cp config/Makefile.in.gnu Makefile.in
 python setup.py
 ```
 
+`setup.py` automatically adds the DMFTwDFT `bin` directory to `PATH` and `PYTHONPATH` in your default shell startup file: `~/.zshrc` for zsh or `~/.bashrc` otherwise. Restart your shell after setup, or source the file printed by setup.
+
 **Available templates**
 
 - `config/Makefile.in.gnu`: GNU compilers on Linux-style systems.

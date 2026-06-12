@@ -94,7 +94,7 @@ DMFTwDFT requires `wannier90.x` and `w90chk2chk.x` to be in the `bin` directory.
 
 ## Path Variables
 
-Finally, the location of the DMFTwDFT `bin` directory should be added to the `$PATH` and `$PYTHONPATH` environment variables in your shell configuration.
+`setup.py` automatically adds the DMFTwDFT `bin` directory to `$PATH` and `$PYTHONPATH` in your default shell startup file: `~/.zshrc` for zsh or `~/.bashrc` otherwise. Restart your shell after setup, or source the file printed by setup.
 
 ## Compiling Library Mode for Full Charge-Self-Consistent DFT+DMFT Calculations
 

@@ -25,6 +25,8 @@ import splash
 
 
 DEFAULT_EDMFT_SOURCE = "https://github.com/ru-ccmt/eDMFT.git"
+SHELL_BLOCK_START = "# >>> DMFTwDFT setup >>>"
+SHELL_BLOCK_END = "# <<< DMFTwDFT setup <<<"
 
 
 def replace_text(file_path, old, new):
@@ -152,6 +154,57 @@ def write_edmft_makefile(base_makefile_path, edmft_src_dir):
 
     with open(os.path.join(edmft_src_dir, "Makefile.in"), "w") as fp:
         fp.write(makefile)
+
+
+def shell_init_block(bin_dir):
+    bin_dir = os.path.join(bin_dir, "")
+    return "\n".join(
+        [
+            SHELL_BLOCK_START,
+            'export PATH="%s:$PATH"' % bin_dir,
+            'export PYTHONPATH="%s:$PYTHONPATH"' % bin_dir,
+            SHELL_BLOCK_END,
+            "",
+        ]
+    )
+
+
+def default_shell_init_file():
+    shell = os.path.basename(os.environ.get("SHELL", ""))
+    if shell == "zsh":
+        return os.path.expanduser("~/.zshrc")
+    return os.path.expanduser("~/.bashrc")
+
+
+def update_shell_init(bin_dir):
+    shell_init_file = default_shell_init_file()
+    block = shell_init_block(bin_dir)
+
+    if os.path.exists(shell_init_file):
+        with open(shell_init_file, "r") as fp:
+            data = fp.read()
+    else:
+        parent = os.path.dirname(shell_init_file)
+        if parent and not os.path.isdir(parent):
+            os.makedirs(parent)
+        data = ""
+
+    if SHELL_BLOCK_START in data and SHELL_BLOCK_END in data:
+        start = data.index(SHELL_BLOCK_START)
+        end = data.index(SHELL_BLOCK_END, start) + len(SHELL_BLOCK_END)
+        suffix = data[end:]
+        if suffix.startswith("\n"):
+            suffix = suffix[1:]
+        data = data[:start].rstrip() + "\n\n" + block + suffix
+        action = "Updated"
+    else:
+        data = data.rstrip() + "\n\n" + block
+        action = "Added"
+
+    with open(shell_init_file, "w") as fp:
+        fp.write(data)
+
+    return shell_init_file, action
 
 
 def main(args):
@@ -320,9 +373,10 @@ def main(args):
 
     # Compilation complete
     print("DMFTwDFT compilation complete!")
-    print(
-        "Please add the bin directory to $PATH and $PYTHONPATH variables in your .bashrc."
-    )
+    bin_dir = os.path.abspath("./bin")
+    shell_init_file, action = update_shell_init(bin_dir)
+    print("%s DMFTwDFT PATH/PYTHONPATH settings in %s." % (action, shell_init_file))
+    print("Restart your shell or run: source %s" % shell_init_file)
     print("Thank you!")
 
 
