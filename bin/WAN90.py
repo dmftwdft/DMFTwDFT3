@@ -10,6 +10,15 @@ from numpy import array, diag, matrix, sum, zeros
 from mysub import *
 
 
+def print_subprocess_output(output):
+    """Print captured subprocess output without Python bytes repr noise."""
+    if not output:
+        return
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    print(output, end="" if output.endswith("\n") else "\n")
+
+
 def now():
     return time.strftime("at %H:%M:%S, %D")
 
@@ -47,7 +56,7 @@ class WANNIER:
             out, err = subprocess.Popen(
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
-            print(out)
+            print_subprocess_output(out)
         else:
             print("chk file does not exist! We are exiting")
             exit()

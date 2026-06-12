@@ -19,6 +19,15 @@ from numpy import array, sqrt, zeros
 import Fileio
 
 
+def print_subprocess_output(output):
+    """Print captured subprocess output without Python bytes repr noise."""
+    if not output:
+        return
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    print(output, end="" if output.endswith("\n") else "\n")
+
+
 def python_path_command(script_path, *args):
     parts = [sys.executable, script_path]
     parts.extend(str(arg) for arg in args)
@@ -169,7 +178,7 @@ def RUN_CTQMC(p, pC, pD, it, itt, para_com, mu, ed, vdc, hf):
             out, err = subprocess.Popen(
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
-            print(out)  # , err
+            print_subprocess_output(out)
             # cmd = 'cp actqmc.cix actqmc'+str(i+1)+'.cix'
             # print os.popen(cmd).read()
             # pD['J=']=float(J[i])
@@ -203,7 +212,7 @@ def RUN_CTQMC(p, pC, pD, it, itt, para_com, mu, ed, vdc, hf):
             # cmd = 'cp '+dir_name+'status.* .'
             # print os.popen(cmd).read()
             # Running ctqmc
-            print("--- Running qmc for atom", i, "iteration: ", str(it + 1), " ---")
+            print("\n--- Running qmc for atom", i, "iteration: ", str(it + 1), " ---")
             strftime("%a, %d %b %Y %H:%M:%S", gmtime())
 
             cmd = (
@@ -218,7 +227,7 @@ def RUN_CTQMC(p, pC, pD, it, itt, para_com, mu, ed, vdc, hf):
             out, err = subprocess.Popen(
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
-            print(out)  # , err
+            print_subprocess_output(out)
 
             # Some copying to store data obtained so far (at each iteration)
             # cmd = 'cp Gf.out ../Gf'+str(i+1)+'.out'

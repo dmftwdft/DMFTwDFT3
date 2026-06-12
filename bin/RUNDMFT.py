@@ -31,6 +31,26 @@ import VASP
 ############################################  Dr. Hyowon Park    ##########
 
 
+def configure_stdio():
+    """Mimic unbuffered Python output for piped runs."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(line_buffering=True, write_through=True)
+
+
+configure_stdio()
+
+
+def print_subprocess_output(output):
+    """Print captured subprocess output without Python bytes repr noise."""
+    if not output:
+        return
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    print(output, end="" if output.endswith("\n") else "\n")
+
+
 def now():
     return time.strftime(" at %c")  # %Y:%H HH:%M MM:%S SS')
 
@@ -265,7 +285,7 @@ if __name__ == "__main__":
     TB.Compute_cor_idx(cor_at, cor_orb)
 
     # ordering dictionary items to print more clearly
-    print("Wannier orbitals in correlated subspace:")
+    print("\nWannier orbitals in correlated subspace:")
     orb_dic = TB.TB_orbs
     l = list(orb_dic.items())
     l.sort()
@@ -364,7 +384,7 @@ if __name__ == "__main__":
                     out, err = subprocess.Popen(
                         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                     ).communicate()
-                    print(out)  # , err
+                    print_subprocess_output(out)
                     cmd = "cp UC.dat UC" + str(i + 1) + ".dat"
                     print(os.popen(cmd).read())
 
@@ -432,7 +452,8 @@ if __name__ == "__main__":
                 out, err = subprocess.Popen(
                     cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 ).communicate()
-            print(out, err)
+            print_subprocess_output(out)
+            print_subprocess_output(err)
 
             fi = open("DMFT_mu.out", "r")
             DMFT.mu = float(fi.readline())
@@ -589,8 +610,10 @@ if __name__ == "__main__":
                     wanbands, DFT.EFERMI + p["ewin"][0], DFT.EFERMI + p["ewin"][1]
                 )
 
-                print(os.popen("rm wannier90.chk").read())
-                print(os.popen("rm wannier90.chk.fmt").read())
+                if os.path.exists("wannier90.chk"):
+                    os.remove("wannier90.chk")
+                if os.path.exists("wannier90.chk.fmt"):
+                    os.remove("wannier90.chk.fmt")
                 main_out.write(
                     "-------------- Running wannier 90 "
                     + str(itt + 1)
@@ -607,7 +630,7 @@ if __name__ == "__main__":
                 ).communicate()
                 if os.path.isfile("wannier90.chk"):
                     print("wannier90 calculation complete.")
-                    print(out)  # , err
+                    print_subprocess_output(out)
                 else:
                     print("wannier90 calculation failed! Exiting.")
                     sys.exit()
@@ -636,7 +659,7 @@ if __name__ == "__main__":
                 out, err = subprocess.Popen(
                     cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 ).communicate()
-                print(out)
+                print_subprocess_output(out)
 
                 # Running siesta
                 cmd = (
@@ -697,11 +720,10 @@ if __name__ == "__main__":
                 shutil.copy("wannier90.win", args.structurename + ".win")
 
                 # Running wannier90
-                chk_seedname_rm = "rm " + args.structurename + ".chk"
-                chk_seedname_fmt_rm = "rm " + args.structurename + ".chk.fmt"
-
-                print(os.popen(chk_seedname_rm).read())
-                print(os.popen(chk_seedname_fmt_rm).read())
+                if os.path.exists(args.structurename + ".chk"):
+                    os.remove(args.structurename + ".chk")
+                if os.path.exists(args.structurename + ".chk.fmt"):
+                    os.remove(args.structurename + ".chk.fmt")
                 main_out.write(
                     "-------------- Running wannier 90 "
                     + str(itt + 1)
@@ -725,7 +747,7 @@ if __name__ == "__main__":
                 ).communicate()
                 if os.path.isfile(args.structurename + ".chk"):
                     print("wannier90 calculation complete.")
-                    print(out)  # , err
+                    print_subprocess_output(out)
                 else:
                     print("wannier90 calculation failed! Exiting.")
                     sys.exit()

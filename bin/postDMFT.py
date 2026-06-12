@@ -39,6 +39,26 @@ from splash import welcome
 BIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def configure_stdio():
+    """Mimic unbuffered Python output for piped runs."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(line_buffering=True, write_through=True)
+
+
+configure_stdio()
+
+
+def print_subprocess_output(output):
+    """Print captured subprocess output without Python bytes repr noise."""
+    if not output:
+        return
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    print(output, end="" if output.endswith("\n") else "\n")
+
+
 def python_command(script_name, *args):
     parts = [sys.executable, os.path.join(BIN_DIR, script_name)]
     parts.extend(str(arg) for arg in args)
@@ -263,7 +283,7 @@ class PostProcess:
             cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         ).communicate()
         if err:
-            print(err)
+            print_subprocess_output(err)
             print("Averaging self-energies Failed!\n")
             sys.exit()
         else:
@@ -371,10 +391,10 @@ class PostProcess:
         out, err = subprocess.Popen(cmd, shell=True).communicate()
         if err:
             print("File copy failed!\n")
-            print(err)
+            print_subprocess_output(err)
             sys.exit()
         else:
-            print(out)
+            print_subprocess_output(out)
 
         if args.sp == False:
             # running dmft_dos.x
@@ -384,7 +404,7 @@ class PostProcess:
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
             if err:
-                print(err)
+                print_subprocess_output(err)
                 print("DMFT DOS calculation failed!\n")
                 sys.exit()
             else:
@@ -409,7 +429,7 @@ class PostProcess:
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
             if err:
-                print(err)
+                print_subprocess_output(err)
                 print("DMFT DOS calculation failed!\n")
                 sys.exit()
             else:
@@ -428,7 +448,7 @@ class PostProcess:
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
             if err:
-                print(err)
+                print_subprocess_output(err)
                 print("DMFT DOS calculation failed!\n")
                 sys.exit()
             else:
@@ -750,7 +770,7 @@ class PostProcess:
         if args.autokp or args.compare:
             args.knames, ticks, discontinuities, args.kplist = self.readKPOINTS(args)
 
-        print(("kplist : %s" % args.kplist))
+        print(("\nkplist : %s" % args.kplist))
         print(("knames : %s" % args.knames))
 
         # Iterating args.kpband to get correct k-list.
@@ -804,10 +824,10 @@ class PostProcess:
         out, err = subprocess.Popen(cmd, shell=True).communicate()
         if err:
             print("File copy failed!\n")
-            print(err)
+            print_subprocess_output(err)
             sys.exit()
         else:
-            print(out)
+            print_subprocess_output(out)
 
         # generating ksum.input
         self.genksum(args.rom, args.kpband)
@@ -821,7 +841,7 @@ class PostProcess:
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
             if err:
-                print(err)
+                print_subprocess_output(err)
                 print("Band structure calculation failed!\n")
                 sys.exit()
             else:
@@ -835,7 +855,7 @@ class PostProcess:
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
             if err:
-                print(err)
+                print_subprocess_output(err)
                 print("Band structure calculation failed!\n")
                 sys.exit()
             else:
@@ -849,7 +869,7 @@ class PostProcess:
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
             if err:
-                print(err)
+                print_subprocess_output(err)
                 print("Band structure calculation failed!\n")
                 sys.exit()
             else:
@@ -1562,7 +1582,7 @@ if __name__ == "__main__":
         parser = argparse.ArgumentParser(
             description=des, formatter_class=RawTextHelpFormatter
         )
-        subparsers = parser.add_subparsers(help="sub-command help")
+        subparsers = parser.add_subparsers(dest="command", help="sub-command help")
 
         # parser for ac
         parser_ac = subparsers.add_parser("ac", help="Analytic Continuation")
@@ -1701,6 +1721,12 @@ if __name__ == "__main__":
         parser_bands.set_defaults(func=PostProcess().bands)
 
         args = parser.parse_args()
+        if args.command == "ac":
+            print("\n--- DMFT Analytic Continuation ---\n")
+        elif args.command == "dos":
+            print("\n--- DMFT DOS Plotter ---\n")
+        elif args.command == "bands":
+            print("\n--- DMFT Bandstructure Plotter ---\n")
         args.func(args)
 
     else:

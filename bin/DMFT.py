@@ -23,6 +23,26 @@ from splash import welcome
 BIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def configure_stdio():
+    """Mimic unbuffered Python output for piped runs."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(line_buffering=True, write_through=True)
+
+
+configure_stdio()
+
+
+def print_subprocess_output(output):
+    """Print captured subprocess output without Python bytes repr noise."""
+    if not output:
+        return
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    print(output, end="" if output.endswith("\n") else "\n")
+
+
 def python_command(script_name, *args):
     parts = [sys.executable, os.path.join(BIN_DIR, script_name)]
     parts.extend(str(arg) for arg in args)
@@ -526,10 +546,10 @@ class DMFTLauncher:
         out, err = subprocess.Popen(cmd, shell=True).communicate()
         if err:
             print("File copy failed!\n")
-            print(err)
+            print_subprocess_output(err)
             sys.exit()
         else:
-            print(out)
+            print_subprocess_output(out)
             print(
                 (
                     "\n"
@@ -791,26 +811,27 @@ class DMFTLauncher:
 
         # VASP
         if self.dft == "vasp":
-            os.popen("rm -f wannier90.chk")
-            os.popen("rm -f wannier90.chk.fmt")
+            if os.path.exists("wannier90.chk"):
+                os.remove("wannier90.chk")
+            if os.path.exists("wannier90.chk.fmt"):
+                os.remove("wannier90.chk.fmt")
             cmd = self.para_com + " " + self.wannier90_exec + " " + filename
             out, err = subprocess.Popen(
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
             if os.path.isfile("wannier90.chk"):
                 print("wannier90 calculation complete.")
-                print(out)  # , err
+                print_subprocess_output(out)
             else:
                 print("wannier90 calculation failed! Exiting.")
                 sys.exit()
 
         # siesta and qe
         else:
-            chk_seedname_rm = "rm " + filename + ".chk"
-            chk_seedname_fmt_rm = "rm " + filename + ".chk.fmt"
-
-            os.popen(chk_seedname_rm)
-            os.popen(chk_seedname_fmt_rm)
+            if os.path.exists(filename + ".chk"):
+                os.remove(filename + ".chk")
+            if os.path.exists(filename + ".chk.fmt"):
+                os.remove(filename + ".chk.fmt")
 
             cmd = self.para_com + " " + self.wannier90_exec + " " + filename
             out, err = subprocess.Popen(
@@ -819,7 +840,7 @@ class DMFTLauncher:
 
             if os.path.isfile(filename + ".chk"):
                 print("wannier90 calculation complete.")
-                print(out)  # , err
+                print_subprocess_output(out)
             else:
                 print("wannier90 calculation failed! Exiting.")
                 sys.exit()
