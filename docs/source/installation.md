@@ -66,6 +66,8 @@ cp config/Makefile.in.gnu Makefile.in
 
 Check that `Makefile.in` points to the correct BLAS, LAPACK, GSL, FFTW, and MPI locations on your system. The template assumes common Linux-style library paths; adjust `LALIB`, `GSLLIB`, compiler commands, and additional flags as needed.
 
+The GNU template assumes that `liblapack.a`, `libblas.a`, and GSL libraries are installed in `/usr/local/lib`. If your system uses different paths, modify `LALIB` and `GSLLIB` in `Makefile.in`. Use `FFLAGSEXTRA` for additional compiler flags required by your compiler or platform.
+
 ## Linux Intel OneAPI
 
 For Intel oneAPI compilers on a cluster, start from:
@@ -74,7 +76,7 @@ For Intel oneAPI compilers on a cluster, start from:
 cp config/Makefile.in.intel Makefile.in
 ```
 
-Load the required compiler and MPI modules before running setup. The Python environment can still come from `environment.yml`, but the Fortran/MPI compiler stack should come from your cluster modules or oneAPI shell setup.
+Load the required compiler and MPI modules before running setup. The Python environment can still come from `environment.yml`, but the Fortran/MPI compiler stack should come from your Intel oneAPI module or cluster module setup.
 
 Keep the Intel template separate from local macOS changes. Do not copy macOS Homebrew paths into `config/Makefile.in.intel`.
 
@@ -90,6 +92,8 @@ python setup.py
 ```
 
 Use one MPI implementation end-to-end. The macOS template is intended for Homebrew OpenMPI, so use Homebrew `mpirun`, Homebrew MPI compiler wrappers, and binaries/extensions linked to Homebrew OpenMPI.
+
+Keep every compiled component on the same architecture and MPI stack. On Apple Silicon, use Homebrew OpenMPI consistently for `mpirun`, `mpi4py`, DMFTwDFT, CTQMC, Wannier90, and DFT interfaces.
 
 Do not mix Homebrew OpenMPI with conda MPICH-linked components. In particular, make sure these components use the same MPI ABI:
 

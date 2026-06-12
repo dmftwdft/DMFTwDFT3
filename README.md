@@ -35,13 +35,21 @@ Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3
 python setup.py
 ```
 
-**Notes**
+**Usage**
 
-- For GNU compilers, it is assumed that `liblapack.a`, `libblas.a` and GSL libraries are installed in the `/usr/local/lib/` directory. If not, modify `LALIB` and `GSLLIB` in `Makefile.in` to point to the correct location. Additionally, set compiler flags in `FFLAGSEXTRA`.
+Copy the DFT inputs (see [examples](https://github.com/dmftwdft/DMFTwDFT3/tree/master/examples)) along with an `input.toml` file to a working directory and run,
 
-- Keep every compiled component on the same architecture and MPI stack. On Apple Silicon, use Homebrew OpenMPI consistently for `mpirun`, `mpi4py`, DMFTwDFT, CTQMC, Wannier90, and DFT interfaces. Do not mix Homebrew OpenMPI with conda MPICH-linked binaries or Python extensions.
+```shell
+DMFT.py -dft siesta -structurename SrVO3 -dmft
+```
 
-- For Intel builds on Linux, the Python environment still comes from `environment.yml`; only the Fortran/MPI compiler stack is external and should come from your Intel oneAPI module or shell setup.
+Afterwards, for post-processing run,
+
+```shell
+postDMFT.py ac -siglistindx 4
+postDMFT.py dos
+postDMFT.py bands -plotplain
+```
 
 ## Developers
 
