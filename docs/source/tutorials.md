@@ -5,20 +5,23 @@ The following tutorials explain the usage of DMFTwDFT. Example files required to
 To perform a DFT+DMFT calculation, the following files should be present within the calculation directory:
 
 - `input.toml`: contains the input parameters that govern the DMFT calculation.
-- `para_com.dat`: contains the number of processors used for the DMFT calculation, such as `mpirun -np 32`.
+- `para_com.dat`: contains the MPI command used for the DMFT calculation, such as `mpirun -n 32`.
+- `para_com_dft.dat`: optional MPI command used for the DFT calculation. If absent, `para_com.dat` is used.
 - DFT files: input files required to launch an initial DFT calculation to initialize the DMFT calculation. AiiDA files are from a completed DFT calculation.
 - VASP: `POSCAR`, `KPOINTS`, `POTCAR`, `INCAR`
 - Siesta: `.fdf`, `.psf`
 - QE: `.scf.in`, `.nscf.in`, `.pw2wannier90.in`
 - QE through AiiDA: `aiida.amn`, `aiida.chk`, `aiida.eig`, `aiida.mmn`, `aiida.out`, `aiida.win`
 
-Before you start, add the `bin` directory path in `input.toml` as the value for the key `path_bin`.
+Before you start, set the `bin` directory path in `input.toml` as the value for `path_bin`. This is used by DMFTwDFT internally and is separate from the shell `PATH` that `setup.py` adds automatically.
 
 For example:
 
 ```toml
-path_bin = "~/Dropbox/git/DMFTwDFT/bin/"
+path_bin = "/path/to/DMFTwDFT3/bin/"
 ```
+
+Use the same MPI implementation in `para_com.dat`, `para_com_dft.dat`, Python `mpi4py`, Wannier90, DMFTwDFT executables, and the DFT executable. On macOS/Homebrew OpenMPI systems, avoid conda MPICH launchers or MPICH-linked extensions.
 
 ## DFT+DMFT Calculation
 
@@ -59,7 +62,7 @@ This script has the following options:
 `v`
 : Flag to enable verbosity.
 
-The calculations are performed in an automatically generated `DMFT` or `HF` directory where the script was run from.
+The calculations are performed in an automatically generated `DMFT` or `HF` directory where the script was run from. For SIESTA workflows, `DMFT.py` generates the Wannier90 input, runs Wannier90 preprocessing to create `<seed>.nnkp`, runs SIESTA, then runs Wannier90 and DMFT.
 
 Examples:
 

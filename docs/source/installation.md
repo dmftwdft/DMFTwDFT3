@@ -1,8 +1,16 @@
 # Installation
 
-DMFTwDFT3 is configured for Python 3.11 environments. Use an already relaxed structure as input when running workflows that do not support ionic relaxation.
+DMFTwDFT3 is configured for Python 3.11 environments. Use an already relaxed structure as input for workflows that do not support ionic relaxation.
 
-Install the Python and compiled-library dependencies before installing DMFTwDFT. The recommended environment files are:
+The installation has three parts:
+
+1. Create the Python environment.
+2. Choose and edit the root `Makefile.in` build configuration.
+3. Run `setup.py`, which builds the internal and external components and installs them into `bin`.
+
+## Python Environment
+
+Recommended environment files are provided in the repository root:
 
 - Linux: `environment.yml`
 - macOS: `environment.macos.yml`
@@ -23,94 +31,130 @@ The core Python dependencies include:
 - `numba`
 - `pybind11`
 
-The core compiled-library dependencies include:
+The compiled-library dependencies include:
 
 - GSL
 - LAPACK
 - BLAS
 - FFTW
+- MPI
 
-The directory structure is:
+## Build Configuration
 
-```text
-DMFTwDFT3
-├── bin
-├── config
-├── docs
-├── examples
-├── manuals
-├── scripts
-├── docs
-│   └── source
-├── support_packages
-└── sources
-    ├── src
-    ├── dmft_ksum
-    ├── fort_kpt_tools
-    └── CSC-mods
-```
-
-The following sections describe the procedure to compile the different components required to run DMFTwDFT. Once the executables and libraries have been compiled, they should be inside the `bin` directory.
-
-## Compiling Sources
-
-First copy a desired `Makefile.in` version from the `config` directory to the repository root based on the compiler you wish to use. You may have to specify the locations of the GSL, LAPACK, and other libraries.
-
-After copying one of `config/Makefile.in.intel`, `config/Makefile.in.gnu`, or `config/Makefile.in.mac` to `Makefile.in` and editing it for your machine, run:
+Copy one template from `config` to the repository root as `Makefile.in`, then edit paths and compiler choices for your machine.
 
 ```bash
+cp config/Makefile.in.gnu Makefile.in
 python setup.py
 ```
 
-This should compile the following executables and libraries and copy them to the `bin` directory:
+Available templates:
 
-- `dmft.x`: achieves DMFT self-consistency. It performs the $k$-point sum and computes the local Green's function (`G_loc.out`) and hybridization function (`Delta.inp`).
-- `dmft_dos.x`: performs DOS calculation.
-- `dmft_ksum_band`: performs band structure calculation.
-- `dmft_ksum_partial_band`: performs projected band structure calculation.
-- `fort_kpt_tools.so`: Fortran-based k-points calculation module.
+- `config/Makefile.in.gnu`: GNU compilers on Linux-style systems.
+- `config/Makefile.in.intel`: Intel oneAPI compilers on Linux clusters.
+- `config/Makefile.in.mac`: macOS Apple Silicon/Homebrew OpenMPI build.
 
-If you want to install them manually, keep `Makefile.in` at the repository root as your editable source of truth and let `setup.py` regenerate `sources/make.inc` from it before building inside `sources`.
+The root `Makefile.in` is the user-managed source of truth. `setup.py` regenerates internal build files such as `sources/make.inc` and the staged eDMFT `Makefile.in` from the root file. Do not edit generated build files unless you are debugging a build.
 
-## External Libraries and Executables
+## Linux GNU
 
-DMFTwDFT uses the CTQMC impurity solver and Max-entropy routines developed by Professor Kristjan Haule at Rutgers University, available with the [EDMFTF](http://hauleweb.rutgers.edu/tutorials/index.html) package. The following libraries and programs are used:
+For a GNU compiler stack, start from:
 
+```bash
+cp config/Makefile.in.gnu Makefile.in
+```
+
+Check that `Makefile.in` points to the correct BLAS, LAPACK, GSL, FFTW, and MPI locations on your system. The template assumes common Linux-style library paths; adjust `LALIB`, `GSLLIB`, compiler commands, and additional flags as needed.
+
+## Linux Intel OneAPI
+
+For Intel oneAPI compilers on a cluster, start from:
+
+```bash
+cp config/Makefile.in.intel Makefile.in
+```
+
+Load the required compiler and MPI modules before running setup. The Python environment can still come from `environment.yml`, but the Fortran/MPI compiler stack should come from your cluster modules or oneAPI shell setup.
+
+Keep the Intel template separate from local macOS changes. Do not copy macOS Homebrew paths into `config/Makefile.in.intel`.
+
+## macOS Apple Silicon
+
+For Apple Silicon, start from:
+
+```bash
+mamba env create -f environment.macos.yml
+mamba activate dmft
+cp config/Makefile.in.mac Makefile.in
+python setup.py
+```
+
+Use one MPI implementation end-to-end. The macOS template is intended for Homebrew OpenMPI, so use Homebrew `mpirun`, Homebrew MPI compiler wrappers, and binaries/extensions linked to Homebrew OpenMPI.
+
+Do not mix Homebrew OpenMPI with conda MPICH-linked components. In particular, make sure these components use the same MPI ABI:
+
+- `mpi4py`
+- `dmft.x`
+- `dmft_dos.x`
+- `dmft_ksum_band`
+- `dmft_ksum_partial_band`
 - `ctqmc`
-- `gaunt.so`
-- `gutils.so`
-- `skrams`
-- `maxent_routines.so`
+- Wannier90 executables
+- DFT executables launched under MPI
 
-If the automated compilation with `setup.py` is successful, these are found in the `bin` directory.
+On Apple Silicon, also keep every compiled component native `arm64`. Do not mix `x86_64` Wannier90, SIESTA, or CTQMC binaries with an `arm64` Python environment and libraries.
 
-## Wannier90 Library
+## Setup Output
 
-DMFTwDFT requires `wannier90.x` and `w90chk2chk.x` to be in the `bin` directory. You can get them from [Wannier90](http://www.wannier.org/). VASP should be recompiled with the Wannier90 library.
+If compilation succeeds, the following executables and libraries are copied to `bin`:
+
+- `dmft.x`: performs the DMFT k-point sum and computes `G_loc.out` and `Delta.inp`.
+- `dmft_dos.x`: performs DOS calculation.
+- `dmft_ksum_band`: performs band-structure calculation.
+- `dmft_ksum_partial_band`: performs projected band-structure calculation.
+- `fort_kpt_tools.so`: Fortran-based k-point utility module.
+- `ctqmc`: CTQMC impurity solver.
+- `gaunt.so`, `dpybind.so`, `maxent_routines.so`, and related impurity/maxent helpers.
+
+## Shell Setup
+
+`setup.py` automatically adds the DMFTwDFT `bin` directory to `PATH` and `PYTHONPATH` in your default shell startup file:
+
+- `~/.zshrc` when `$SHELL` is zsh
+- `~/.bashrc` otherwise
+
+The block looks like this:
+
+```bash
+# >>> DMFTwDFT setup >>>
+export PATH="/path/to/DMFTwDFT3/bin/:$PATH"
+export PYTHONPATH="/path/to/DMFTwDFT3/bin/:$PYTHONPATH"
+# <<< DMFTwDFT setup <<<
+```
+
+Restart your shell after setup, or source the file printed by `setup.py`.
+
+## Wannier90
+
+DMFTwDFT requires `wannier90.x` and `w90chk2chk.x` to be available in `bin` or otherwise resolvable in your environment. You can get them from [Wannier90](http://www.wannier.org/). VASP workflows also require VASP to be compiled with Wannier90 support.
 
 ```{note}
-`w90chk2chk.x` seems to be problematic with Wannier90 v3.0+. It has been tested successfully with v2.1.0.
+`w90chk2chk.x` has historically been more reliable with Wannier90 v2.1.0 than with some newer Wannier90 releases.
 ```
 
-## Path Variables
+For MPI workflows, build Wannier90 against the same MPI implementation used by DMFTwDFT and the DFT code.
 
-`setup.py` automatically adds the DMFTwDFT `bin` directory to `$PATH` and `$PYTHONPATH` in your default shell startup file: `~/.zshrc` for zsh or `~/.bashrc` otherwise. Restart your shell after setup, or source the file printed by setup.
+## Library Mode For Charge-Self-Consistent DFT+DMFT
 
-## Compiling Library Mode for Full Charge-Self-Consistent DFT+DMFT Calculations
+The compilation also generates `libdmft.a`, which can be linked into DFT codes to enable full charge-self-consistent DFT+DMFT calculations. Otherwise, calculations are self-consistent only within DMFT.
 
-The above compilation also generates `libdmft.a`, which can be used to link DMFTwDFT to DFT codes to enable full charge self-consistent DFT+DMFT calculations. Otherwise, the calculations can only be run for self-consistency within DMFT. For VASP, follow these steps to compile for self-consistency.
+For VASP:
 
-1. Generate `libdmft.a` by compiling the source code.
-2. Change the VASP `makefile.include` file. Specify libraries and/or objects to be linked against in the usual ways:
+1. Generate `libdmft.a` by compiling DMFTwDFT.
+2. Add `libdmft.a` and required libraries/objects to the VASP `makefile.include` link line.
+3. Install VASP once before modifying source files.
+4. Copy the modified `mlwf.F` from `sources/CSC-mods` into the VASP source tree and rebuild to create dependencies.
+5. Copy the other required modified files, such as `charge.F`, `electron.F`, `main.F`, and `us.F`, from `sources/CSC-mods`.
+6. Recompile VASP, rename the executable to `vaspDMFT`, and copy it to the DMFTwDFT `bin` directory.
 
-```makefile
-LLIBS += -Lparser -lparser -lstdc++ /home/uthpala/wannier90/wannier90-1.2/libwannier.a \
-         /home/uthpala/Dropbox/git/DMFTwDFT/sources/libdmft.a
-```
-
-3. Before modifying the VASP source code, install VASP as-is by following the VASP installation instructions.
-4. Copy the modified `mlwf.F` VASP file from the `sources/CSC-mods` directory to the VASP source directory and install VASP again. This step creates dependencies for the next step.
-5. Copy the other modified or required VASP files, such as `charge.F`, `electron.F`, `main.F`, and `us.F`, from the `sources/CSC-mods` directory to the VASP source directory.
-6. Recompile VASP. Then rename this VASP executable to `vaspDMFT` and copy it to the DMFTwDFT `bin` directory.
-
-More information on the library mode can be found in {ref}`labellibrary`.
+More information on library mode can be found in {ref}`labellibrary`.

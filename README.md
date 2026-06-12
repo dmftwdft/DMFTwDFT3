@@ -18,22 +18,24 @@ Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3
 
 **Quick Install**
 
-Copy one of the templates in `config` to `Makefile.in` in the repo root, edit it for your machine, and run the setup.:
-
-E.g.,
+Create the Python environment, copy the closest build template to the repository root as `Makefile.in`, edit paths for your machine, and run setup.
 
 ```bash
+mamba env create -f environment.yml
+mamba activate dmft
 cp config/Makefile.in.gnu Makefile.in
 python setup.py
 ```
 
 `setup.py` automatically adds the DMFTwDFT `bin` directory to `PATH` and `PYTHONPATH` in your default shell startup file: `~/.zshrc` for zsh or `~/.bashrc` otherwise. Restart your shell after setup, or source the file printed by setup.
 
+`Makefile.in` in the repository root is the editable build configuration. `setup.py` regenerates internal build files such as `sources/make.inc`; do not edit generated build files unless you are debugging the build.
+
 **Available templates**
 
 - `config/Makefile.in.gnu`: GNU compilers on Linux-style systems.
 - `config/Makefile.in.intel`: Intel oneAPI compilers.
-- `config/Makefile.in.mac`: macOS conda environment using GNU Fortran, MPI, BLAS/LAPACK, GSL and FFTW from the same conda environment.
+- `config/Makefile.in.mac`: macOS Apple Silicon/Homebrew OpenMPI build using Homebrew compilers/MPI/OpenBLAS and conda-provided Python/GSL where configured.
 
 **Recommended environments**
 
@@ -44,7 +46,7 @@ python setup.py
 
 - For GNU compilers, it is assumed that `liblapack.a`, `libblas.a` and GSL libraries are installed in the `/usr/local/lib/` directory. If not, modify `LALIB` and `GSLLIB` in `Makefile.in` to point to the correct location. Additionally, set compiler flags in `FFLAGSEXTRA`.
 
-- Keep every compiled component on the same architecture. On Apple Silicon, the provided `environment.macos.yml` creates a native `arm64` environment and `config/Makefile.in.mac` defaults to the native architecture. Build Wannier90, DMFTwDFT and any DFT interfaces against the same conda environment. Do not mix an `x86_64` Wannier90 binary with `arm64` conda BLAS/MPI libraries, or the reverse.
+- Keep every compiled component on the same architecture and MPI stack. On Apple Silicon, use Homebrew OpenMPI consistently for `mpirun`, `mpi4py`, DMFTwDFT, CTQMC, Wannier90, and DFT interfaces. Do not mix Homebrew OpenMPI with conda MPICH-linked binaries or Python extensions.
 
 - For Intel builds on Linux, the Python environment still comes from `environment.yml`; only the Fortran/MPI compiler stack is external and should come from your Intel oneAPI module or shell setup.
 
