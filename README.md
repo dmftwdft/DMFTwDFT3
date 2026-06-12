@@ -2,15 +2,15 @@
 
 DMFTwDFT is an open-source, user-friendly framework to calculate properties of strongly correlated materials (SCM) using DFT+DMFT (Dynamical Mean Field Theory) with a variety of different DFT codes. Currently supports VASP, Siesta and Quantum Espresso.
 
-![](docs/images/dmftwdft-hd.png)
+![](docs/source/_static/images/dmftwdft-hd.png)
 
 ## Features <br />
 
-![](docs/images/welcome.jpg)
+![](docs/source/_static/images/welcome.jpg)
 
 ## Workflow <br />
 
-![](docs/images/steps.png)
+![](docs/source/_static/images/steps.png)
 
 ## Installation and usage
 

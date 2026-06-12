@@ -31,5 +31,6 @@ sources/src/obj/*
 *.log
 *.mod
 
-#sphinx
+# Documentation builds
 _build/
+docs/build/
