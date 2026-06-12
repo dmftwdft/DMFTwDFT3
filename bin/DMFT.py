@@ -45,6 +45,14 @@ def print_subprocess_output(output):
     print(output, end="" if output.endswith("\n") else "\n")
 
 
+def run_command(cmd):
+    proc = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    out, err = proc.communicate()
+    return proc.returncode, out, err
+
+
 def python_command(script_name, *args):
     parts = [sys.executable, os.path.join(BIN_DIR, script_name)]
     parts.extend(str(arg) for arg in args)
@@ -327,11 +335,9 @@ class DMFTLauncher:
         This method generates the initial self energy file sig.inp.
         """
         cmd = python_command("sigzero.py")
-        out, err = subprocess.Popen(
-            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        ).communicate()
-        if err:
-            print((err.decode("utf-8")))
+        returncode, out, err = run_command(cmd)
+        print_subprocess_output(err)
+        if returncode != 0 or not os.path.exists("sig.inp"):
             sys.exit()
         else:
             print("Initial self-energy file generated.")
@@ -545,8 +551,8 @@ class DMFTLauncher:
             + " && "
             + python_command("Copy_input.py", "../")
         )
-        out, err = subprocess.Popen(cmd, shell=True).communicate()
-        if err:
+        returncode, out, err = run_command(cmd)
+        if returncode != 0:
             print("File copy failed!\n")
             print_subprocess_output(err)
             sys.exit()
@@ -696,12 +702,13 @@ class DMFTLauncher:
             # kpoints
             f.write("\nbegin kpoints\n")
             cmd = "kmesh.pl " + grid[0] + " " + grid[5] + " " + grid[10] + " wannier"
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
+            returncode, out, err = run_command(cmd)
             f.write(out.decode("utf-8"))
             if err:
                 print((err.decode("utf-8")))
+            if returncode != 0:
+                print("kmesh.pl failed! Exiting.")
+                sys.exit()
             f.write("end kpoints")
             f.close()
             print("wannier90.win generated.")
@@ -751,12 +758,13 @@ class DMFTLauncher:
                 + str(self.grid[2])
                 + " wannier"
             )
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
+            returncode, out, err = run_command(cmd)
             f.write(out.decode("utf-8"))
             if err:
                 print((err.decode("utf-8")))
+            if returncode != 0:
+                print("kmesh.pl failed! Exiting.")
+                sys.exit()
             f.write("end kpoints")
             f.close()
             print("wannier90.win generated.")
@@ -795,14 +803,17 @@ class DMFTLauncher:
         Outputs a .nnkp file which is required for the DFT calculaiton.
         """
         cmd = self.wannier90_exec + " -pp" + " " + self.structurename
-        out, err = subprocess.Popen(
+        proc = subprocess.Popen(
             cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        ).communicate()
+        )
+        out, err = proc.communicate()
+        if out:
+            print((out.decode("utf-8")))
         if err:
             print((err.decode("utf-8")))
+        if proc.returncode != 0 or not os.path.exists(self.structurename + ".nnkp"):
+            print("wannier90 preprocessing failed! Exiting.")
             sys.exit()
-        else:
-            print((out.decode("utf-8")))
 
     def run_wan90(self, filename="wannier90"):
         """
@@ -963,12 +974,13 @@ class DMFTLauncher:
                     + " "
                     + str(self.grid[2])
                 )
-                out, err = subprocess.Popen(
-                    cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                ).communicate()
+                returncode, out, err = run_command(cmd)
                 f.write(out.decode("utf-8"))
                 if err:
                     print((err.decode("utf-8")))
+                if returncode != 0:
+                    print("kmesh.pl failed! Exiting.")
+                    sys.exit()
                 f.close()
 
                 # Save the Total energy from the SCF calculation.
@@ -1295,14 +1307,9 @@ class DMFTLauncher:
             ).communicate()
 
         else:
-            out, err = subprocess.Popen(
-                cmd,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()
+            returncode, out, err = run_command(cmd)
 
-            if err:
+            if returncode != 0:
                 print(
                     (
                         self.type

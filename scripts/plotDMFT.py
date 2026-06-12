@@ -51,6 +51,14 @@ import warnings
 warnings.filterwarnings("ignore", module="matplotlib\..*")
 
 
+def print_subprocess_output(output):
+    if not output:
+        return
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    print(output, end="" if output.endswith("\n") else "\n")
+
+
 # Setting up plotting class
 plt.rcParams["mathtext.default"] = "regular"  # Roman ['rm', 'cal', 'it', 'tt', 'sf',
 #                                                   'bf', 'default', 'bb', 'frak',
@@ -144,11 +152,12 @@ def plot_dmft(args):
     print("\nAveraging self-energies from: ")
     print(se_files)
     cmd = "cd plots/tmp/ && sigaver.py sig.inp.*"
-    out, err = subprocess.Popen(
+    proc = subprocess.Popen(
         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    ).communicate()
-    if err:
-        print(err)
+    )
+    out, err = proc.communicate()
+    print_subprocess_output(err)
+    if proc.returncode != 0 or not os.path.exists("./plots/tmp/sig.inpx"):
         sys.exit()
 
     # setting up figures

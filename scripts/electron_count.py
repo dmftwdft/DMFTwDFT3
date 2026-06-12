@@ -31,6 +31,22 @@ from input_loader import load_input
 p, pC, pD = load_input()
 
 
+def print_subprocess_output(output):
+    if not output:
+        return
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    print(output, end="" if output.endswith("\n") else "\n")
+
+
+def run_command(cmd):
+    proc = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    out, err = proc.communicate()
+    return proc.returncode, out, err
+
+
 class ElectronOccupation:
     """This class has the methods to calculate the electrons in the
     correlated subspace."""
@@ -246,12 +262,13 @@ class ElectronOccupation:
             # kpoints
             f.write("\nbegin kpoints\n")
             cmd = "kmesh.pl " + grid[0] + " " + grid[5] + " " + grid[10] + " wannier"
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
+            returncode, out, err = run_command(cmd)
             f.write(out.decode("utf-8"))
             if err:
                 print((err.decode("utf-8")))
+            if returncode != 0:
+                print("kmesh.pl failed! Exiting.")
+                sys.exit()
             f.write("end kpoints")
             f.close()
 
@@ -430,14 +447,12 @@ class ElectronOccupation:
         Outputs a .nnkp file which is required for the DFT calculaiton.
         """
         cmd = "wannier90.x -pp" + " " + self.structurename
-        out, err = subprocess.Popen(
-            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        ).communicate()
-        if err:
-            print((err.decode("utf-8")))
+        returncode, out, err = run_command(cmd)
+        print_subprocess_output(out)
+        print_subprocess_output(err)
+        if returncode != 0 or not os.path.exists(self.structurename + ".nnkp"):
+            print("wannier90 preprocessing failed! Exiting.")
             sys.exit()
-        else:
-            print((out.decode("utf-8")))
 
     def run_wan90(self, filename="wannier90"):
         """
@@ -472,13 +487,12 @@ class ElectronOccupation:
             cmd = (
                 "mpirun -np" + " " + str(self.np) + " " + "wannier90.x" + " " + filename
             )
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
+            returncode, out, err = run_command(cmd)
+            print_subprocess_output(out)
+            print_subprocess_output(err)
 
-            if os.path.isfile(filename + ".chk"):
+            if returncode == 0 and os.path.isfile(filename + ".chk"):
                 print("wannier90 calculation complete.")
-                print(out)  # , err
             else:
                 print("wannier90 calculation failed! Exiting.")
                 sys.exit()

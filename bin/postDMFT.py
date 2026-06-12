@@ -61,6 +61,14 @@ def print_subprocess_output(output):
     print(output, end="" if output.endswith("\n") else "\n")
 
 
+def run_command(cmd):
+    proc = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    out, err = proc.communicate()
+    return proc.returncode, out, err
+
+
 def python_command(script_name, *args):
     parts = [sys.executable, os.path.join(BIN_DIR, script_name)]
     parts.extend(str(arg) for arg in args)
@@ -281,11 +289,9 @@ class PostProcess:
         print("\nAveraging self-energies from: ")
         print(siglist)
         cmd = "cd ac && " + python_command("sigaver.py") + " sig.inp.*"
-        out, err = subprocess.Popen(
-            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        ).communicate()
-        if err:
-            print_subprocess_output(err)
+        returncode, out, err = run_command(cmd)
+        print_subprocess_output(err)
+        if returncode != 0 or not os.path.exists("./ac/sig.inpx"):
             print("Averaging self-energies Failed!\n")
             sys.exit()
         else:
@@ -306,11 +312,9 @@ class PostProcess:
             + python_command("maxent_run.py", "sig.inpx")
             + " >ac.out 2>ac.error"
         )
-        out, err = subprocess.Popen(
-            cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        ).communicate()
+        returncode, out, err = run_command(cmd)
 
-        if os.path.exists("./ac/Sig.out"):
+        if returncode == 0 and os.path.exists("./ac/Sig.out"):
             print("Analytic continuation complete.\n")
         else:
             print("Analytic continuation failed! Check ac.error for details.\n")
@@ -390,8 +394,8 @@ class PostProcess:
 
         # copying files from DMFT directory to dos directory
         cmd = "cd dos && " + python_command("Copy_input.py", "../", "-post", "dos")
-        out, err = subprocess.Popen(cmd, shell=True).communicate()
-        if err:
+        returncode, out, err = run_command(cmd)
+        if returncode != 0:
             print("File copy failed!\n")
             print_subprocess_output(err)
             sys.exit()
@@ -402,11 +406,9 @@ class PostProcess:
             # running dmft_dos.x
             print("Calculating DMFT DOS...")
             cmd = "cd dos && " + self.para_com + " " + "dmft_dos.x"
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
-            if err:
-                print_subprocess_output(err)
+            returncode, out, err = run_command(cmd)
+            print_subprocess_output(err)
+            if returncode != 0 or not os.path.exists("./dos/G_loc.out"):
                 print("DMFT DOS calculation failed!\n")
                 sys.exit()
             else:
@@ -427,11 +429,9 @@ class PostProcess:
             # running dmft_dos.x for spin up
             print("Calculating DMFT DOS for spin up...")
             cmd = "cd dos && " + self.para_com + " " + "dmft_dos.x"
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
-            if err:
-                print_subprocess_output(err)
+            returncode, out, err = run_command(cmd)
+            print_subprocess_output(err)
+            if returncode != 0 or not os.path.exists("./dos/G_loc.out"):
                 print("DMFT DOS calculation failed!\n")
                 sys.exit()
             else:
@@ -446,11 +446,9 @@ class PostProcess:
             # running dmft_dos.x for spin down
             print("Calculating DMFT DOS for spin down...")
             cmd = "cd dos && " + self.para_com + " " + "dmft_dos.x"
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
-            if err:
-                print_subprocess_output(err)
+            returncode, out, err = run_command(cmd)
+            print_subprocess_output(err)
+            if returncode != 0 or not os.path.exists("./dos/G_loc.out"):
                 print("DMFT DOS calculation failed!\n")
                 sys.exit()
             else:
@@ -823,8 +821,8 @@ class PostProcess:
 
         # copying files from DMFT directory to dos directory
         cmd = "cd bands && " + python_command("Copy_input.py", "../", "-post", "bands")
-        out, err = subprocess.Popen(cmd, shell=True).communicate()
-        if err:
+        returncode, out, err = run_command(cmd)
+        if returncode != 0:
             print("File copy failed!\n")
             print_subprocess_output(err)
             sys.exit()
@@ -839,11 +837,9 @@ class PostProcess:
         if args.plotplain:
             print("\nCalculating plain band structure...")
             cmd = "cd bands && " + self.para_com + " " + "dmft_ksum_band"
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
-            if err:
-                print_subprocess_output(err)
+            returncode, out, err = run_command(cmd)
+            print_subprocess_output(err)
+            if returncode != 0 or not os.path.exists("./bands/Gk.out"):
                 print("Band structure calculation failed!\n")
                 sys.exit()
             else:
@@ -853,11 +849,9 @@ class PostProcess:
         if args.plotpartial:
             print("\nCalculating projected band structure...")
             cmd = "cd bands && " + self.para_com + " " + "dmft_ksum_partial_band"
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
-            if err:
-                print_subprocess_output(err)
+            returncode, out, err = run_command(cmd)
+            print_subprocess_output(err)
+            if returncode != 0 or not os.path.exists("./bands/Gk.out"):
                 print("Band structure calculation failed!\n")
                 sys.exit()
             else:
@@ -867,11 +861,13 @@ class PostProcess:
         if sp:
             print("\nCalculating spin-polarized band structure...")
             cmd = "cd bands && " + self.para_com + " " + "dmft_ksum_band"
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
-            if err:
-                print_subprocess_output(err)
+            returncode, out, err = run_command(cmd)
+            print_subprocess_output(err)
+            if (
+                returncode != 0
+                or not os.path.exists("./bands/Gk.out")
+                or not os.path.exists("./bands/Gk_dn.out")
+            ):
                 print("Band structure calculation failed!\n")
                 sys.exit()
             else:
