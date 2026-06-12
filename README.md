@@ -2,6 +2,7 @@
 
 DMFTwDFT is an open-source, user-friendly framework to calculate properties of strongly correlated materials (SCM) using DFT+DMFT (Dynamical Mean Field Theory) with a variety of different DFT codes. Currently supports VASP, Siesta and Quantum Espresso.
 
+Read the documentation to learn more: https://dmftwdft.github.io/DMFTwDFT3
 ![](docs/source/_static/images/dmftwdft-hd.png)
 
 ## Features <br />
@@ -13,8 +14,6 @@ DMFTwDFT is an open-source, user-friendly framework to calculate properties of s
 ![](docs/source/_static/images/steps.png)
 
 ## Quick Install
-
-Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3
 
 1\. Create a Python environment using a recommended `environment.yml` file.
 
@@ -98,12 +97,12 @@ Please post your questions on our forum: https://groups.google.com/d/forum/dmftw
 
 We acknowledge the use of the following packages,
 
-\- [Continuous time Quantum Monte Carlo (ctqmc)](http://hauleweb.rutgers.edu/tutorials/Tutorial0.html) through the eDMFT library.<br />
+[Continuous time Quantum Monte Carlo (ctqmc)](http://hauleweb.rutgers.edu/tutorials/Tutorial0.html) through the eDMFT library.<br />
 
 [1] Kristjan Haule, Phys. Rev. B 75, 155113 (2007). <br />
 [2] Kristjan Haule, Turan Birol, Phys. Rev. Lett. 115, 256402 (2015).
 
-\- [Wannier90](http://www.wannier.org/)<br>
+[Wannier90](http://www.wannier.org/)<br>
 
 [1] Wannier90 as a community code: new features and applications, G. Pizzi et al., J. Phys. Cond. Matt. 32, 165902 (2020)
 
