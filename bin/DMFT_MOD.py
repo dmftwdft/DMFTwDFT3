@@ -145,7 +145,7 @@ class DMFT_class:
                     idx += 1
         if self.ncor_orb != nspin * idx:
             print(
-                "The number of correlated orbitals in sig.inp and INPUT.py is not consistent"
+                "The number of correlated orbitals in sig.inp and input.toml is not consistent"
             )
             exit()
 
@@ -891,8 +891,9 @@ class DMFT_class:
 
 if __name__ == "__main__":
     import Struct, VASP
+    from input_loader import load_input
 
-    exec(compile(open("INPUT.py", "rb").read(), "INPUT.py", "exec"))  # Read input file
+    p, pC, pD = load_input()
     TB = Struct.TBstructure("POSCAR", p["atomnames"], p["orbs"])
     cor_at = p["cor_at"]
     cor_orb = p["cor_orb"]

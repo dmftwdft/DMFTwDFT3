@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-""" Wannier Manifold Electron Occupation Calculater.
+"""Wannier Manifold Electron Occupation Calculater.
 
 This is an extension to the original code developed by Xingyu Liao in Dr. Park's
 group at UIC.
@@ -8,11 +8,10 @@ It calculates the total number of electrons in the Wannier manifold.
 This is an initial requirement to perform DMFT calculations with DMFTwDFT.
 
 This requires that the DMFTwDFT/bin directory is added to $PYTHONPATH.
-It takes the atomnames, orbs, cor_at and cor_orb from INPUT.py.
+It takes the atomnames, orbs, cor_at and cor_orb from input.toml.
 Also requires the DFT input files to be present.
 
 """
-
 
 from scipy import *
 from os import path
@@ -26,7 +25,10 @@ import numpy as np
 
 import Struct
 import VASP
-from INPUT import *
+from input_loader import load_input
+
+
+p, pC, pD = load_input()
 
 
 class ElectronOccupation:
@@ -34,7 +36,6 @@ class ElectronOccupation:
     correlated subspace."""
 
     def __init__(self, args):
-
         self.dft = args.dft
         self.np = args.np
         self.structurename = args.structurename
@@ -218,7 +219,6 @@ class ElectronOccupation:
         # Siesta runs.
 
         if self.dft == "siesta":
-
             # Update wannier90.win file.
             f = open("wannier90.win", "a")
             f.write("\nbegin unit_cell_cart\n")
@@ -395,7 +395,6 @@ class ElectronOccupation:
             ).communicate()
 
             if os.path.exists(self.structurename + ".out"):
-
                 fi = open(self.structurename + ".out", "r")
                 done_word = fi.readlines()[-1]
                 fi.close()
@@ -546,7 +545,6 @@ class ElectronOccupation:
 if __name__ == "__main__":
     args = sys.argv[1:]
     if args:
-
         des = (
             "This script counts the total number of electrons in the Wannier sub space."
         )

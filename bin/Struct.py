@@ -69,7 +69,7 @@ class TBstructure:
             print("Number of atoms for poscar is not right!")
             exit()
         self.nspecies = len(self.specpoint)
-        # if self.nspecies!=len(atomnames): print "Number of atoms for poscar and for INPUT.py is not consistent!"; exit()
+        # if self.nspecies!=len(atomnames): print "Number of atoms for poscar and for input.toml is not consistent!"; exit()
         self.coord = line2.strip().lower()[0]
         self.at = zeros((sum(self.specpoint), 3), float)
         for i in range(sum(self.specpoint)):

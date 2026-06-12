@@ -17,6 +17,7 @@ from numpy import arange, array, diag, dot, matrix, ones, shape, sum, transpose,
 
 import Fileio
 import fort_kpt_tools as fkpt
+from input_loader import load_input
 import MATRIX_util
 import Struct
 import WAN90
@@ -274,7 +275,7 @@ if __name__ == "__main__":
     #   if ncor_orb!=len(SigMdc): print "ncor_orb is not consistent with SigMdc"; exit()
     #   if ncor_orb/norb!=len(U): print "ncor_orb is not consistent with U"; exit()
 
-    exec(compile(open("INPUT.py", "rb").read(), "INPUT.py", "exec"))
+    p, pC, pD = load_input()
     TB = Struct.TBstructure("POSCAR", p["atomnames"], p["orbs"])
     cor_at = p["cor_at"]
     cor_orb = p["cor_orb"]

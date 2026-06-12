@@ -10,6 +10,8 @@ from os.path import getsize
 
 from scipy import *
 
+from input_loader import INPUT_FILE
+
 if __name__ == "__main__":
     # top level parser
     des = "This tool copies all the required files necessary for the DMFT calculation."
@@ -54,7 +56,7 @@ if __name__ == "__main__":
                 "DFT_mu.out",
                 "DMFT_mu.out",
                 "dmft_params.dat",
-                "INPUT.py",
+                INPUT_FILE,
                 "para_com.dat",
             ]
         else:
@@ -64,7 +66,7 @@ if __name__ == "__main__":
                 "DFT_mu.out",
                 "DMFT_mu.out",
                 "dmft_params.dat",
-                "INPUT.py",
+                INPUT_FILE,
                 "para_com.dat",
             ]
 
@@ -76,8 +78,6 @@ if __name__ == "__main__":
                 print((files + " must exist in a " + cpdr + " directory! Exiting!"))
                 sys.exit(1)
 
-        exec(compile(open("INPUT.py", "rb").read(), "INPUT.py", "exec"))
-
     elif post == "bands":
         if structurename is None:
             bandsfiles = [
@@ -85,7 +85,7 @@ if __name__ == "__main__":
                 "wannier90.eig",
                 "DMFT_mu.out",
                 "dmft_params.dat",
-                "INPUT.py",
+                INPUT_FILE,
                 "para_com.dat",
             ]
         else:
@@ -94,7 +94,7 @@ if __name__ == "__main__":
                 str(structurename) + ".eig",
                 "DMFT_mu.out",
                 "dmft_params.dat",
-                "INPUT.py",
+                INPUT_FILE,
                 "para_com.dat",
             ]
 
@@ -111,8 +111,6 @@ if __name__ == "__main__":
             # Renaming is just easier.
             shutil.copy(str(structurename) + ".chk", "wannier90.chk")
             shutil.copy(str(structurename) + ".eig", "wannier90.eig")
-
-        exec(compile(open("INPUT.py", "rb").read(), "INPUT.py", "exec"))
 
     else:
         DFTfiles = {
@@ -248,17 +246,18 @@ if __name__ == "__main__":
                 #   print files+" does not exist in a "+cpdr+" directory!"
                 #   print files+" will be needed for charge update!"
 
-        DMFTfiles = ["sig.inp", "DMFT_mu.out", "INPUT.py"]
+        DMFTfiles = ["sig.inp", "DMFT_mu.out", INPUT_FILE]
         if os.path.exists(cpdr + "/sig.inp"):
             print("Copying DMFT file sig.inp to the current directory")
             shutil.copy2(cpdr + "/sig.inp", ".")
         else:
             print("sig.inp file does not exist! Must be generated using sigzero.py")
-        if os.path.exists(cpdr + "/INPUT.py"):
-            print("Copying DMFT file INPUT.py to the current directory")
-            shutil.copy2(cpdr + "/INPUT.py", ".")
+        if os.path.exists(cpdr + "/" + INPUT_FILE):
+            print("Copying DMFT file {0} to the current directory".format(INPUT_FILE))
+            shutil.copy2(cpdr + "/" + INPUT_FILE, ".")
         else:
-            print("sig.inp file does not exist! Must be generated using sigzero.py")
+            print("{0} file does not exist! Exiting!".format(INPUT_FILE))
+            sys.exit(1)
         if os.path.exists(cpdr + "/DMFT_mu.out"):
             print("Copying DMFT file DMFT_mu.out to the current directory")
             shutil.copy2(cpdr + "/DMFT_mu.out", ".")

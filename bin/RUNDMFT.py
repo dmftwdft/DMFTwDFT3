@@ -24,6 +24,7 @@ import Fileio
 import IMP_SOLVER
 import Struct
 import VASP
+from input_loader import load_input
 
 ###########################################################################
 #### This program executes VASP+DMFT using CTQMC impurity solver ##########
@@ -177,7 +178,7 @@ if __name__ == "__main__":
 
     # END OF ARGPARSE SECTION #
 
-    exec(compile(open("INPUT.py", "rb").read(), "INPUT.py", "exec"))  # Read input file
+    p, pC, pD = load_input()
 
     main_out = open("INFO_TIME", "w")
     main_iter = open("INFO_ITER", "w")

@@ -4,7 +4,7 @@ The following tutorials explain the usage of DMFTwDFT. Example files required to
 
 To perform a DFT+DMFT calculation, the following files should be present within the calculation directory:
 
-- `INPUT.py`: contains the input parameters that govern the DMFT calculation.
+- `input.toml`: contains the input parameters that govern the DMFT calculation.
 - `para_com.dat`: contains the number of processors used for the DMFT calculation, such as `mpirun -np 32`.
 - DFT files: input files required to launch an initial DFT calculation to initialize the DMFT calculation. AiiDA files are from a completed DFT calculation.
 - VASP: `POSCAR`, `KPOINTS`, `POTCAR`, `INCAR`
@@ -12,12 +12,12 @@ To perform a DFT+DMFT calculation, the following files should be present within 
 - QE: `.scf.in`, `.nscf.in`, `.pw2wannier90.in`
 - QE through AiiDA: `aiida.amn`, `aiida.chk`, `aiida.eig`, `aiida.mmn`, `aiida.out`, `aiida.win`
 
-Before you start, add the `bin` directory path in `INPUT.py` as the value for the key `path_bin`.
+Before you start, add the `bin` directory path in `input.toml` as the value for the key `path_bin`.
 
 For example:
 
-```python
-"path_bin": "~/Dropbox/git/DMFTwDFT/bin/"
+```toml
+path_bin = "~/Dropbox/git/DMFTwDFT/bin/"
 ```
 
 ## DFT+DMFT Calculation
@@ -45,7 +45,7 @@ This script has the following options:
 : This flag performs the DMFT calculation using the results from the DFT calculation if a previous DMFT calculation in the same directory is incomplete.
 
 `hf`
-: This flag performs the Hartree-Fock (HF) calculation to the correlated orbitals specified in `INPUT.py` if a previous HF calculation in the same directory is incomplete.
+: This flag performs the Hartree-Fock (HF) calculation to the correlated orbitals specified in `input.toml` if a previous HF calculation in the same directory is incomplete.
 
 `force`
 : This flag forces a DMFT or HF calculation even if a previous calculation has been completed. The option to check for completeness is helpful when running many DMFT/HF jobs on a cluster.

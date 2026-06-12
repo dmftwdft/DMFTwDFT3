@@ -17,6 +17,7 @@ from scipy import *
 from numpy import array, sqrt, zeros
 
 import Fileio
+from input_loader import load_input
 
 
 def print_subprocess_output(output):
@@ -256,6 +257,6 @@ def RUN_CTQMC(p, pC, pD, it, itt, para_com, mu, ed, vdc, hf):
 
 
 if __name__ == "__main__":
-    exec(compile(open("INPUT.py", "rb").read(), "INPUT.py", "exec"))
+    p, pC, pD = load_input()
     pD["Eimp="] = [1, 2, 3]
     Create_atomd(pD)

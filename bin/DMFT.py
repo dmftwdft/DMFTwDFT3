@@ -16,7 +16,7 @@ import numpy as np
 
 import Struct
 import VASP
-from INPUT import *
+from input_loader import INPUT_FILE, load_input
 from splash import welcome
 
 
@@ -32,6 +32,8 @@ def configure_stdio():
 
 
 configure_stdio()
+
+p, pC, pD = load_input()
 
 
 def print_subprocess_output(output):
@@ -265,8 +267,8 @@ class DMFTLauncher:
                 for sig in glob.glob("./DMFT/sig.inp.*"):
                     os.remove(sig)
 
-                # Copy INPUT.py, para_com.dat, para_com_dft.dat into DMFT directory
-                shutil.copy("INPUT.py", "./DMFT/INPUT.py")
+                # Copy input.toml, para_com.dat, para_com_dft.dat into DMFT directory
+                shutil.copy(INPUT_FILE, os.path.join("./DMFT", INPUT_FILE))
                 shutil.copy("para_com.dat", "./DMFT/para_com.dat")
 
                 if os.path.exists("para_com_dft.dat"):

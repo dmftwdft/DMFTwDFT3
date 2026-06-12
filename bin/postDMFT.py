@@ -32,7 +32,7 @@ import Fileio
 # import oreo
 # import Re_wt
 import Struct
-from INPUT import *
+from input_loader import load_input
 from splash import welcome
 
 
@@ -48,6 +48,8 @@ def configure_stdio():
 
 
 configure_stdio()
+
+p, pC, pD = load_input()
 
 
 def print_subprocess_output(output):

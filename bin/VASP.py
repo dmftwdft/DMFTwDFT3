@@ -308,10 +308,10 @@ class VASP_class:
         dis_num_iter=500,
     ):
         if len(L_rot) != len(atomnames):
-            print("Check INPUT.py for atomnames and L_rot!")
+            print("Check input.toml for atomnames and L_rot!")
             exit()
         if len(orbs) != len(atomnames):
-            print("Check INPUT.py for atomnames and L_rot!")
+            print("Check input.toml for atomnames and L_rot!")
             exit()
         nwann = 0
         for i, orb in enumerate(orbs):

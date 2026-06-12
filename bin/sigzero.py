@@ -7,6 +7,8 @@ from scipy import optimize
 import numpy
 from numpy import arange, array, linspace, ones, pi, sqrt, tan
 
+from input_loader import INPUT_FILE, load_input
+
 nv = list(map(int, numpy.__version__.split(".")))
 if (nv[0], nv[1]) < (1, 6):
     loadtxt = io.read_array
@@ -69,8 +71,8 @@ if __name__ == "__main__":
     Create a zero input self-energy for dmft0, dmft1 and dmft0
     """
     # n==(200/T-1)/2.
-    if os.path.exists("INPUT.py"):
-        exec(compile(open("INPUT.py", "rb").read(), "INPUT.py", "exec"))
+    if os.path.exists(INPUT_FILE):
+        p, pC, pD = load_input()
         nc = 0
         Emag = 1.0  # Zeeman energy = 2*Emag
         for i, ats in enumerate(p["cor_at"]):
