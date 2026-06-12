@@ -12,11 +12,9 @@ DMFTwDFT is an open-source, user-friendly framework to calculate properties of s
 
 ![](docs/source/_static/images/steps.png)
 
-## Installation and usage
+## Quick Install
 
 Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3
-
-**Quick Install**
 
 1\. Create a Python environment using a recommended `environment.yml` file.
 
@@ -35,7 +33,7 @@ Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3
 python setup.py
 ```
 
-**Usage**
+## Usage
 
 Copy the DFT inputs (see [examples](https://github.com/dmftwdft/DMFTwDFT3/tree/master/examples)) along with an `input.toml` file to a working directory and run,
 
