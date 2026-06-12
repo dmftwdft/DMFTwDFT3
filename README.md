@@ -18,29 +18,22 @@ Please refer to the documentation: https://dmftwdft.github.io/DMFTwDFT3
 
 **Quick Install**
 
-Create the Python environment, copy the closest build template to the repository root as `Makefile.in`, edit paths for your machine, and run setup.
+1\. Create a Python environment using a recommended `environment.yml` file.
 
-```bash
-mamba env create -f environment.yml
-mamba activate dmft
-cp config/Makefile.in.gnu Makefile.in
-python setup.py
-```
+- Linux: `mamba env create -f environment.yml`
+- macOS: `mamba env create -f environment.macos.yml`
 
-`setup.py` automatically adds the DMFTwDFT `bin` directory to `PATH` and `PYTHONPATH` in your default shell startup file: `~/.zshrc` for zsh or `~/.bashrc` otherwise. Restart your shell after setup, or source the file printed by setup.
-
-`Makefile.in` in the repository root is the editable build configuration. `setup.py` regenerates internal build files such as `sources/make.inc`; do not edit generated build files unless you are debugging the build.
-
-**Available templates**
+2\. Copy a build template to the repository root as `Makefile.in` and edit values as needed for your system.
 
 - `config/Makefile.in.gnu`: GNU compilers on Linux-style systems.
 - `config/Makefile.in.intel`: Intel oneAPI compilers.
 - `config/Makefile.in.mac`: macOS Apple Silicon/Homebrew OpenMPI build using Homebrew compilers/MPI/OpenBLAS and conda-provided Python/GSL where configured.
 
-**Recommended environments**
+3\. Run the setup script,
 
-- Linux: `mamba env create -f environment.yml`
-- macOS: `mamba env create -f environment.macos.yml`
+```bash
+python setup.py
+```
 
 **Notes**
 
