@@ -129,17 +129,12 @@ def RUN_CTQMC(p, pC, pD, it, itt, para_com, mu, ed, vdc, hf):
         if len(cor_orb[i]) > 0:
             dir_name = "imp." + str(i) + "/"
             if it == 0 and itt == 0:
-                cmd = "mkdir " + dir_name
-                print(os.popen(cmd).read())
-                print(
-                    os.popen(
-                        "cp Trans" + str(i + 1) + ".dat " + dir_name + "Trans.dat"
-                    ).read()
-                )
+                os.makedirs(dir_name, exist_ok=True)
+                shutil.copy2("Trans" + str(i + 1) + ".dat", dir_name + "Trans.dat")
                 # cmd = 'rm status.*'
                 # print os.popen(cmd).read()
                 if os.path.exists("status" + str(i) + ".tar.gz"):
-                    print(os.popen("mv status" + str(i) + ".tar.gz " + dir_name).read())
+                    shutil.move("status" + str(i) + ".tar.gz", dir_name)
 
             shutil.copy2("Delta" + str(i + 1) + ".inp", dir_name + "Delta.inp")
 
