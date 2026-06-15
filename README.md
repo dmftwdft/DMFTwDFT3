@@ -114,11 +114,4 @@ We acknowledge the use of the following packages,
 
 ## Changelog
 
-v2.1 June 12, 2026 - Migrated inputs from INPUT.py to input.toml.<br />
-v2.0 June 8, 2026 - Updated code to support modern compute architectures including Python3, Intel oneAPI LLVM compilers and MacOS.<br />
-v1.2 Jan 13th, 2020 - Fixed bug with exponentially large numbers in UNI_mat.dat for SCF calculations. <br />
-v1.1 May 11th, 2020 - Added support for Quantum Espresso through Aiida. <br />
-v1.0 April 23, 2020 - Cleaned repository. Defaulted to Python 2.x version. <br />
-v0.3 November 25, 2019 - Added DMFT.py and postDMFT.py scripts <br />
-v0.2 July 10, 2019 - DMFTwDFT library version <br />
-v0.1 July 31, 2018 - Initial release (Command line version)
+See [CHANGELOG.md](CHANGELOG.md).
