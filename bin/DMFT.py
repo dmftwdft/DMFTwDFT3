@@ -10,16 +10,15 @@ import sys
 import glob
 from argparse import RawTextHelpFormatter
 from itertools import groupby
-from shutil import copyfile
-
 import numpy as np
 
+# DMFTwDFT imports
 import Struct
 import VASP
 from input_loader import INPUT_FILE, load_input
 from splash import welcome
 
-
+# Global helper functions
 BIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -29,11 +28,6 @@ def configure_stdio():
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
             reconfigure(line_buffering=True, write_through=True)
-
-
-configure_stdio()
-
-p, pC, pD = load_input()
 
 
 def print_subprocess_output(output):
@@ -87,6 +81,11 @@ class DMFTLauncher:
         Contains common functions for all methods.
         This launches the dmft calculation as well.
         """
+
+        # Configure IO and parse input.toml file
+        configure_stdio()
+        global p, pC, pD
+        p, pC, pD = load_input()
 
         self.kmeshtol = args.kmeshtol  # kmesh tolerence for wannier mesh
         self.restart = args.restart  # force restart calculation True of False

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import ast
-import copy
 import glob
 import itertools
 import math
@@ -9,33 +8,27 @@ import os
 import re
 import shlex
 import shutil
-import math
 import subprocess
 import sys
 from argparse import RawTextHelpFormatter
 import warnings
-
-import matplotlib
-
-matplotlib.use("pdf")
-warnings.filterwarnings("ignore", module="matplotlib\..*")
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy.interpolate
-from matplotlib.font_manager import FontProperties, fontManager
-from pylab import *
-from scipy import *
 from scipy import interpolate
 
+# DMFTwDFT imports
 import Fileio
-
-# import oreo
-# import Re_wt
 import Struct
 from input_loader import load_input
 from splash import welcome
 
+# Matploglib imports
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib import cm
+matplotlib.use("pdf")
+warnings.filterwarnings("ignore", module=r"matplotlib\..*")
 
+# Global helper functions
 BIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -47,11 +40,6 @@ def configure_stdio():
             reconfigure(line_buffering=True, write_through=True)
 
 
-configure_stdio()
-
-p, pC, pD = load_input()
-
-
 def print_subprocess_output(output):
     """Print captured subprocess output without Python bytes repr noise."""
     if not output:
@@ -59,7 +47,6 @@ def print_subprocess_output(output):
     if isinstance(output, bytes):
         output = output.decode("utf-8", errors="replace")
     print(output, end="" if output.endswith("\n") else "\n")
-
 
 def run_command(cmd):
     proc = subprocess.Popen(
@@ -111,6 +98,12 @@ class PostProcess:
         """
         Initializes the following:
         """
+
+        # Configure IO and parse input.toml file
+        configure_stdio()
+        global p, pC, pD
+        p, pC, pD = load_input()
+
         # mpirun
         if os.path.exists("para_com.dat"):
             fipa = open("para_com.dat", "r")
@@ -1318,7 +1311,7 @@ class PostProcess:
                 fig, ax2 = self.plotDFTBands(args, fig=fig, ax=ax2)
 
             if args.show:
-                show()
+                plt.show()
             fig.savefig("./bands/A_k_sp.eps", format="eps", dpi=1200)
 
         elif args.sp and args.spinup and args.spindown is False:
@@ -1590,7 +1583,7 @@ if __name__ == "__main__":
             type=int,
             help="How many last self energy files to average?",
         )
-        parser_ac.set_defaults(func=PostProcess().anal_cont)
+        parser_ac.set_defaults(func="anal_cont")
 
         # parser for dos
         parser_dos = subparsers.add_parser("dos", help="DMFT Density of States")
@@ -1613,7 +1606,7 @@ if __name__ == "__main__":
         parser_dos.add_argument(
             "-elim", type=float, nargs=2, help="Energy range to plot"
         )
-        parser_dos.set_defaults(func=PostProcess().dos)
+        parser_dos.set_defaults(func="dos")
 
         # parser for bands
         parser_bands = subparsers.add_parser("bands", help="DMFT Bandstructure")
@@ -1716,7 +1709,7 @@ if __name__ == "__main__":
         parser_bands.add_argument(
             "-show", action="store_true", help="Display the bands"
         )
-        parser_bands.set_defaults(func=PostProcess().bands)
+        parser_bands.set_defaults(func="bands")
 
         args = parser.parse_args()
         if args.command == "ac":
@@ -1725,7 +1718,7 @@ if __name__ == "__main__":
             print("\n--- DMFT DOS Plotter ---\n")
         elif args.command == "bands":
             print("\n--- DMFT Bandstructure Plotter ---\n")
-        args.func(args)
+        getattr(PostProcess(), args.func)(args)
 
     else:
         print("Usage: postDMFT.py -h")
