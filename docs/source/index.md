@@ -19,7 +19,7 @@ DMFTwDFT consists of two main scripts to perform DFT+DMFT calculations:
 - `DMFT.py`: performs DFT and DMFT calculations.
 - `postDMFT.py`: performs post-processing including analytic continuation, density of states, and band structures.
 
-The `/scripts` directory contains several utility scripts.
+The `utilities` directory contains optional helper scripts for plotting, analysis, and debugging.
 
 ```{toctree}
 :maxdepth: 2
@@ -28,6 +28,7 @@ The `/scripts` directory contains several utility scripts.
 installation
 workflow
 examples/index
+utilities
 troubleshooting
 library
 developers
