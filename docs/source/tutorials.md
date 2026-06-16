@@ -2,6 +2,12 @@
 
 The following tutorials explain the usage of DMFTwDFT. Example files required to run these calculations are available in the `/examples` directory in the GitHub repository.
 
+```{note}
+The PDF manuals in `/examples` are useful historical references, but some commands and file names in them predate the current `input.toml`, `DMFT.py`, and `postDMFT.py` workflow. The pages in this documentation use the current names where they differ from the PDFs.
+```
+
+For a fuller walk-through of the calculation stages, input parameters, output files, convergence checks, and backend-specific notes, see {doc}`workflow`.
+
 To perform a DFT+DMFT calculation, the following files should be present within the calculation directory:
 
 - `input.toml`: contains the input parameters that govern the DMFT calculation.

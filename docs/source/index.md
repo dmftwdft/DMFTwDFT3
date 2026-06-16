@@ -27,6 +27,7 @@ The `/scripts` directory contains several utility scripts.
 
 installation
 tutorials
+workflow
 troubleshooting
 library
 developers
