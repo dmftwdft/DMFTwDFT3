@@ -19,7 +19,11 @@ For example:
 
 ```toml
 path_bin = "/path/to/DMFTwDFT3/bin/"
+kmeshtol = 1e-7 # Wannier90 k-mesh shell tolerance
+sig_tol = 1e-3 # Self-energy convergence tolerance
 ```
+
+`num_bands_win` is an optional `[p]` parameter for overriding the number of bands written to the Wannier90 input. Leave it unset unless you need to force a specific `num_bands` value; when omitted, DMFTwDFT uses the number of bands read from the DFT input or output.
 
 Use the same MPI implementation in `para_com.dat`, `para_com_dft.dat`, Python `mpi4py`, Wannier90, DMFTwDFT executables, and the DFT executable. On macOS/Homebrew OpenMPI systems, avoid conda MPICH launchers or MPICH-linked extensions.
 
@@ -52,9 +56,6 @@ This script has the following options:
 
 `force`
 : This flag forces a DMFT or HF calculation even if a previous calculation has been completed. The option to check for completeness is helpful when running many DMFT/HF jobs on a cluster.
-
-`kmeshtol`
-: This controls the tolerance of two k-points belonging to the same shell in the Wannier90 calculation.
 
 `aiida`
 : Flag for AiiDA calculations. Currently, Quantum Espresso is supported through AiiDA.

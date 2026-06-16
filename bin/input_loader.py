@@ -42,6 +42,8 @@ def load_input(input_path=INPUT_FILE):
         )
 
     p = data["p"]
+    p.setdefault("kmeshtol", 1e-7)
+    p.setdefault("sig_tol", 1e-3)
     pC = {key: [value, _PC_COMMENTS.get(key, "")] for key, value in data["pC"].items()}
     pD = data["pD"]
     return p, pC, pD

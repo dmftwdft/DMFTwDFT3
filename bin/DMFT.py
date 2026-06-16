@@ -69,7 +69,6 @@ class DMFTLauncher:
     -dmft : This flag performs dmft calculation
     -hf : This flag performs Hartree-Fock calcualtion
     -restart : This flag restarts the calculation from the beginning
-    -kmeshtol : k-mesh tolerance for wannier90
     -aiida : Flag for aiida calculations
     -nowin : Flag to disable automatic generation of .win file
     -v : Enable verbosity
@@ -87,7 +86,6 @@ class DMFTLauncher:
         global p, pC, pD
         p, pC, pD = load_input()
 
-        self.kmeshtol = args.kmeshtol  # kmesh tolerence for wannier mesh
         self.restart = args.restart  # force restart calculation True of False
         self.v = args.v  # Verbosity
         self.dft = args.dft  # DFT type
@@ -651,7 +649,7 @@ class DMFTLauncher:
             # be updated later once the DFT calculation is complete.
             self.DFT.EFERMI + p["ewin"][0],
             self.DFT.EFERMI + p["ewin"][1],
-            self.kmeshtol,
+            p["kmeshtol"],
         )
 
         # If exclude_bands are to be included in the .win file.
@@ -1371,12 +1369,6 @@ if __name__ == "__main__":
         )
         parser.add_argument(
             "-aiida", help="Flag for aiida calculation. ", action="store_true"
-        )
-        parser.add_argument(
-            "-kmeshtol",
-            default=1e-07,
-            type=float,
-            help="The tolerance to control if two k-points belong to the same shell in wannier90.",
         )
         parser.add_argument(
             "-lowdin",

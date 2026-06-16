@@ -3,20 +3,15 @@
 import argparse
 import glob
 import os
-import re
 import shlex
 import shutil
-import socket
 import subprocess
 import sys
 import time
 from argparse import RawTextHelpFormatter
 from collections import OrderedDict
 from copy import deepcopy
-from os.path import getsize
 
-import scipy.interpolate
-from scipy import *
 from numpy import array, loadtxt, zeros
 
 import DMFT_MOD
@@ -76,13 +71,7 @@ def check_convergence():
     last 3 iterations
     """
     # sigdiff tolerance
-    if list(p.keys()).count("sig_tol"):
-        if p["sig_tol"]:
-            sigdifftol = p["sig_tol"]
-        else:
-            sigdifftol = 1e-03
-    else:
-        sigdifftol = 1e-03
+    sigdifftol = p["sig_tol"]
 
     sigdiff_array = []
 
