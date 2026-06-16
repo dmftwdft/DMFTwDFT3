@@ -1120,7 +1120,7 @@ class PostProcess:
 
         if args.show:
             plt.show()
-        fig.savefig("./bands/A_k_partial.eps", format="eps", dpi=1200)
+        fig.savefig("./bands/A_k_partial.pdf", format="pdf", dpi=300)
 
     def plot_sp_bands(self, args):
         """
