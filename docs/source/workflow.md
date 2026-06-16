@@ -2,6 +2,8 @@
 
 This page summarizes the current DFT+DMFT workflow and translates the older PDF tutorial material into the current `input.toml`, `DMFT.py`, and `postDMFT.py` interface.
 
+For concrete runnable starting points, see {doc}`examples/index`.
+
 ## Overview
 
 DMFTwDFT combines a DFT calculation, a Wannier90 projection, and a DMFT impurity loop. The main DMFT executable computes the local Green's function `G_loc.out` and hybridization functions `Delta*.inp` from the current self-energy `sig.inp`. The impurity solver then updates the self-energy, and the process repeats until the lattice and impurity quantities converge.

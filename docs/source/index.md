@@ -26,8 +26,8 @@ The `/scripts` directory contains several utility scripts.
 :caption: Contents
 
 installation
-tutorials
 workflow
+examples/index
 troubleshooting
 library
 developers
