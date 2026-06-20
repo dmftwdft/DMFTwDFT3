@@ -5,7 +5,7 @@ DMFTwDFT is an open-source, user-friendly framework to calculate properties of s
 Read the documentation to learn more: https://dmftwdft.github.io/DMFTwDFT3
 
 > [!NOTE]
-> DMFTwDFT3 brings major updates to its Python-2-based predecessor, [DMFTwDFT](https://github.com/dmftwdft/DMFTwDFT), with a focus on supporting modern compute architectures including a Python-3 ecosystem, Intel oneAPI LLVM compilers, and MacOS compatibility. Hereafter, DMFTwDFT3 will be referred to as DMFTwDFT for brevity.
+> DMFTwDFT3 brings major updates to its Python-2 predecessor, [DMFTwDFT](https://github.com/dmftwdft/DMFTwDFT), with a focus on supporting modern compute architectures including a Python-3 ecosystem, Intel oneAPI LLVM compilers, and MacOS compatibility. Hereafter, DMFTwDFT3 will be referred to as DMFTwDFT for brevity.
 
 ![](docs/source/_static/images/dmftwdft-hd.png)
 
