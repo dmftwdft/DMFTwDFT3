@@ -1,32 +1,23 @@
 #!/bin/bash
-#SBATCH --job-name=LNO_phonon
-#SBATCH -N 2
-#SBATCH -p bdwall
-##SBATCH -A Meso 
-##SBATCH -A dmft_for_oxides    
-#SBATCH -A nickelates         
-#SBATCH --ntasks-per-node=36
-#SBATCH -t 30:00:00
-#SBATCH -D ./ 
+#SBATCH -J DMFTwDFT_run             # Job name
+#SBATCH -p interactive         # Queue (partition) name
+#SBATCH -N 4                 # Total # of nodes
+#SBATCH --ntasks-per-node 64 # Tasks per node
+#SBATCH --mem=100G           # Memory per node
+#SBATCH -t 04:00:00
 
-export I_MPI_FABRICS=shm:tmi
+# Initialization
+set -eo pipefail
 
-export I_MPI_CC=icc
-export I_MPI_CXX=icpc
-export I_MPI_F77=ifort
-export I_MPI_F90=ifort
+source ~/.bashrc
+ulimit -s unlimited
+mamba activate dmft # Activate conda environment for DMFT
+intel # Load Intel compiler
 
-module load intel/17.0.4-74uvhji #intel/16.0.4-nzcw5zc
-module load gsl/2.4
-module load anaconda/4.4.0 
-module load cmake/3.8.1-orygmpj
-export PYTHONPATH=/home/hyowon/Codes/DMFT_DFT/bin:$PYTHONPATH
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soft/bebop/gsl/2.4/lib
-
-mkdir $SLURM_JOBID
-cd $SLURM_JOBID
-cp ../* .
-
-echo mpirun -n $SLURM_NTASKS > para_com.dat
-echo mpirun -n 72 > para_com2.dat
-python RUNDMFT.py > output.dat 2>errors.out
+cd $SLURM_SUBMIT_DIR
+echo "mpirun -n $SLURM_NTASKS" > para_com.dat
+DMFT.py -dmft -v -dft vasp 2>&1 | tee dmft.log
+cd DMFT
+postDMFT.py ac -siglistindx 4 2>&1 | tee ac.log
+postDMFT.py dos 2>&1 | tee dos.log
+postDMFT.py bands -plotplain -rom 1000 -kpband 1000 -normalize 2>&1 | tee bands.log

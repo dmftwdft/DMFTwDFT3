@@ -16,7 +16,7 @@ intel # Load Intel compiler
 
 cd $SLURM_SUBMIT_DIR
 echo "mpirun -n $SLURM_NTASKS" > para_com.dat
-DMFT.py -dmft -v -dft vasp 2>&1 | tee dmft.log
+DMFT.py -dmft -v -dft qe -aiida 2>&1 | tee dmft.log
 cd DMFT
 postDMFT.py ac -siglistindx 4 2>&1 | tee ac.log
 postDMFT.py dos 2>&1 | tee dos.log
