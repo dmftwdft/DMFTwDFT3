@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 
 import matplotlib.pyplot as plt
-# Import math Library
 import math
-
-# Print the value of pi
-print (math.pi)
 
 with open('G_loc.out', 'r') as f:
     lines = f.readlines()
@@ -23,12 +19,12 @@ with open('G_loc.out', 'r') as f:
     tg= [float(line.split()[4])+float(line.split()[6])+float(line.split()[10]) for line in lines]
 
 y_eg =[-1*count/(math.pi) for count in yg]
-y_t2g =[-1*count/(math.pi) for count in tg]  
-    
+y_t2g =[-1*count/(math.pi) for count in tg]
+
 plt.figure(1)
-plt.plot(x,y_eg,'r',label='$d-e_g$') 
-plt.plot(x,y_t2g,'b',label='$d-t_{2g}$') 
-plt.title('DMFT PDOS')  
+plt.plot(x,y_eg,'r',label='$d-e_g$')
+plt.plot(x,y_t2g,'b',label='$d-t_{2g}$')
+plt.title('DMFT PDOS')
 plt.xlabel('Energy (eV)')
 plt.ylabel('DOS (states eV/cell)')
 plt.axvline(x=0,color='gray',linestyle='--')
