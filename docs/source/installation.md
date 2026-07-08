@@ -1,16 +1,16 @@
 # Installation
 
-DMFTwDFT3 is configured for Python 3.11 environments. Use an already relaxed structure as input for workflows that do not support ionic relaxation.
+DMFTwDFT3 is configured for Python 3.11 environments.
 
-The installation has three parts:
+The installation has three parts,
 
 1. Create the Python environment.
 2. Choose and edit the root `Makefile.in` build configuration.
-3. Run `setup.py`, which builds the internal and external components and installs them into `bin`.
+3. Run `setup.py`, which builds the internal and external components and installs them into `bin`. This step also sets up the environmental variables.
 
 ## Python Environment
 
-Recommended environment files are provided in the repository root:
+Recommended environment files are provided in the repository root,
 
 - Linux: `environment.yml`
 - macOS: `environment.macos.yml`
@@ -22,23 +22,6 @@ mamba env create -f environment.yml
 mamba activate dmft
 ```
 
-The core Python dependencies include:
-
-- `matplotlib`
-- `numpy`
-- `scipy`
-- `mpi4py`
-- `numba`
-- `pybind11`
-
-The compiled-library dependencies include:
-
-- GSL
-- LAPACK
-- BLAS
-- FFTW
-- MPI
-
 ## Build Configuration
 
 Copy one template from `config` to the repository root as `Makefile.in`, then edit paths and compiler choices for your machine.
@@ -48,17 +31,25 @@ cp config/Makefile.in.gnu Makefile.in
 python setup.py
 ```
 
-Available templates:
+Available templates,
 
-- `config/Makefile.in.gnu`: GNU compilers on Linux-style systems.
-- `config/Makefile.in.intel`: Intel oneAPI compilers on Linux clusters.
+- `config/Makefile.in.gnu`: GNU compilers on Linux systems.
+- `config/Makefile.in.intel`: Intel oneAPI compilers on Linux systems.
 - `config/Makefile.in.mac`: macOS Apple Silicon/Homebrew OpenMPI build.
 
-The root `Makefile.in` is the user-managed source of truth. `setup.py` regenerates internal build files such as `sources/make.inc` and the staged eDMFT `Makefile.in` from the root file. Do not edit generated build files unless you are debugging a build.
+The root `Makefile.in` is the user-managed build configuration that governs the compilation of DMFTwDFT and its dependencies. `setup.py` regenerates internal build files such as `sources/make.inc` and the staged eDMFT `Makefile.in` from the root file. Do not edit generated build files unless you are debugging a build.
 
-## Linux GNU
+The compiled-library dependencies include,
 
-For a GNU compiler stack, start from:
+- GSL
+- LAPACK
+- BLAS
+- FFTW
+- MPI
+
+### Linux GNU
+
+For a GNU compiler stack, start from,
 
 ```bash
 cp config/Makefile.in.gnu Makefile.in
@@ -68,19 +59,17 @@ Check that `Makefile.in` points to the correct BLAS, LAPACK, GSL, FFTW, and MPI 
 
 The GNU template assumes that `liblapack.a`, `libblas.a`, and GSL libraries are installed in `/usr/local/lib`. If your system uses different paths, modify `LALIB` and `GSLLIB` in `Makefile.in`. Use `FFLAGSEXTRA` for additional compiler flags required by your compiler or platform.
 
-## Linux Intel OneAPI
+### Linux Intel OneAPI
 
-For Intel oneAPI compilers on a cluster, start from:
+For Intel oneAPI compilers on a cluster, start from,
 
 ```bash
 cp config/Makefile.in.intel Makefile.in
 ```
 
-Load the required compiler and MPI modules before running setup. The Python environment can still come from `environment.yml`, but the Fortran/MPI compiler stack should come from your Intel oneAPI module or cluster module setup.
+Most of the necessary libraries for the Intel setup will come from the Intel MKL library. Ensure that \$MKLROOT is set correctly in your environment.
 
-Keep the Intel template separate from local macOS changes. Do not copy macOS Homebrew paths into `config/Makefile.in.intel`.
-
-## macOS Apple Silicon
+### macOS Apple Silicon
 
 For Apple Silicon, start from:
 
@@ -148,11 +137,11 @@ DMFTwDFT requires `wannier90.x` and `w90chk2chk.x` to be available in `bin` or o
 
 For MPI workflows, build Wannier90 against the same MPI implementation used by DMFTwDFT and the DFT code.
 
-## Library Mode For Charge-Self-Consistent DFT+DMFT
+## Library Mode for charge self-consistent DFT+DMFT calculations
 
-The compilation also generates `libdmft.a`, which can be linked into DFT codes to enable full charge-self-consistent DFT+DMFT calculations. Otherwise, calculations are self-consistent only within DMFT.
+The compilation also generates `libdmft.a`, which can be linked into DFT codes to enable full charge-self-consistent DFT+DMFT calculations. Otherwise, calculations are self-consistent only within DMFT (one-shot DMFT).
 
-For VASP:
+For VASP,
 
 1. Generate `libdmft.a` by compiling DMFTwDFT.
 2. Add `libdmft.a` and required libraries/objects to the VASP `makefile.include` link line.
