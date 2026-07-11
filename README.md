@@ -62,17 +62,18 @@ Refer to the [documentation](https://dmftwdft.github.io/DMFTwDFT3) to learn more
 
 ## Developers
 
-Hyowon Park <br />
-Aldo Romero <br />
-Uthpala Herath <br />
-Vijay Singh <br />
-Benny Wah <br />
-Xingyu Liao <br />
+- Hyowon Park (University of Illinois at Chicago)
+- Aldo Romero (West Virginia University)
+- Uthpala Herath (Duke University, West Virginia University)
+- Vijay Singh (GITAM School of Science, University of Illinois at Chicago)
+- Benny Wah (University of Illinois at Chicago)
+- Xingyu Liao (University of Illinois at Chicago)
 
 ## Contributors
 
-Kristjan Haule <br />
-Chris Marianetti <br />
+- Kristjan Haule (Rutgers University)
+- Chris Marianetti (Columbia University)
+- Javier Junquera (Universidad de Cantabria)
 
 ## How to cite
 
