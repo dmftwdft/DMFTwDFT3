@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3 - 2026-07-11
+
+- Changed `DMFT.py` and `postDMFT.py` input argument formats to use standard subcommands, short options, and long `--option-name` arguments.
+
 ## 2.2 - 2026-06-15
 
 - Added automatic shell setup in `setup.py` for `PATH` and `PYTHONPATH`.

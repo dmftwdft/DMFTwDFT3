@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use DMFTwDFT in published work, please cite the main DMFTwDFT paper."
+title: "DMFTwDFT3"
+url: "https://github.com/dmftwdft/DMFTwDFT3"
+authors:
+  - family-names: Singh
+    given-names: Vijay
+  - family-names: Herath
+    given-names: Uthpala
+  - family-names: Wah
+    given-names: Benny
+  - family-names: Liao
+    given-names: Xingyu
+  - family-names: Romero
+    given-names: Aldo H.
+  - family-names: Park
+    given-names: Hyowon
+preferred-citation:
+  type: article
+  title: "DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various density functional theory packages"
+  authors:
+    - family-names: Singh
+      given-names: Vijay
+    - family-names: Herath
+      given-names: Uthpala
+    - family-names: Wah
+      given-names: Benny
+    - family-names: Liao
+      given-names: Xingyu
+    - family-names: Romero
+      given-names: Aldo H.
+    - family-names: Park
+      given-names: Hyowon
+  journal: "Computer Physics Communications"
+  volume: "261"
+  year: 2021
+  doi: "10.1016/j.cpc.2020.107778"
+  url: "https://doi.org/10.1016/j.cpc.2020.107778"
