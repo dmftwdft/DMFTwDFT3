@@ -16,8 +16,8 @@ intel # Load Intel compiler
 
 cd $SLURM_SUBMIT_DIR
 echo "mpirun -n $SLURM_NTASKS" > para_com.dat
-DMFT.py -dmft -v -dft vasp 2>&1 | tee dmft.log
+DMFT.py dmft --verbose --dft vasp 2>&1 | tee dmft.log
 cd DMFT
-postDMFT.py ac -siglistindx 4 2>&1 | tee ac.log
+postDMFT.py ac --average 4 2>&1 | tee ac.log
 postDMFT.py dos 2>&1 | tee dos.log
-postDMFT.py bands -plotplain -rom 1000 -kpband 1000 -normalize 2>&1 | tee bands.log
+postDMFT.py bands --plot-plain --omega-points 1000 --band-k-points 1000 --normalize 2>&1 | tee bands.log

@@ -32,7 +32,7 @@ Key settings in `input.toml`:
 Run from a copied and edited example directory:
 
 ```bash
-DMFT.py -dft qe -structurename SrVO3 -dmft
+DMFT.py dmft --dft qe --structure-name SrVO3
 ```
 
 DMFTwDFT uses the `SrVO3` seed to identify QE and Wannier90 files such as `SrVO3.scf.in`, `SrVO3.nscf.in`, and `SrVO3.pw2wannier90.in`.

@@ -62,16 +62,20 @@ class DMFTLauncher:
     This version does not support ionic covergence. Please use an optimized structure for the calculation.
 
     Run with:
-    DMFT.py <options>
+    DMFT.py <calculation> <options>
+
+    <calculation>:
+    dmft : Perform a DMFT calculation
+    hf : Perform a Hartree-Fock calculation
 
     <options>:
-    -dft <vasp,siesta,qe>
-    -dmft : This flag performs dmft calculation
-    -hf : This flag performs Hartree-Fock calcualtion
-    -restart : This flag restarts the calculation from the beginning
-    -aiida : Flag for aiida calculations
-    -nowin : Flag to disable automatic generation of .win file
-    -v : Enable verbosity
+    -d, --dft <vasp,siesta,qe>
+    -s, --structure-name <seed>
+    -r, --restart : Restart the calculation from the beginning
+    -a, --aiida : Flag for aiida calculations
+    -l, --lowdin : Flag to use Siesta Lowdin version
+    -n, --no-win : Flag to disable automatic generation of .win file
+    -v, --verbose : Enable verbosity
 
     """
 
@@ -1337,56 +1341,70 @@ if __name__ == "__main__":
             description=des, formatter_class=RawTextHelpFormatter
         )
 
-        # parser for dft
-        parser.add_argument(
-            "-dft",
+        common_parser = argparse.ArgumentParser(add_help=False)
+        common_parser.add_argument(
+            "-d",
+            "--dft",
             default="vasp",
             type=str,
             help="Choice of DFT code for the DMFT calculation.",
             choices=["vasp", "siesta", "qe"],
         )
-        type_parser = parser.add_mutually_exclusive_group()
-        type_parser.add_argument(
-            "-dmft",
-            action="store_true",
-            help="Flag to run DMFT. Attempts to resume if previous calculation exists.",
-        )
-        type_parser.add_argument(
-            "-hf",
-            action="store_true",
-            help="Flag to perform Hartree-Fock calculation to the correlated orbitals. Attempts to resume if previous calculation exists.",
-        )
-        parser.add_argument(
-            "-restart",
-            action="store_true",
-            help="Flag to restart calculation from the beginning.",
-        )
-        parser.add_argument(
-            "-structurename",
+        common_parser.add_argument(
+            "-s",
+            "--structure-name",
+            dest="structurename",
+            metavar="STRUCTURE_NAME",
             type=str,
             help="Name of the structure. Not required for VASP. ",
             default=None,
         )
-        parser.add_argument(
-            "-aiida", help="Flag for aiida calculation. ", action="store_true"
+        common_parser.add_argument(
+            "-r",
+            "--restart",
+            action="store_true",
+            help="Flag to restart calculation from the beginning.",
         )
-        parser.add_argument(
-            "-lowdin",
+        common_parser.add_argument(
+            "-a", "--aiida", help="Flag for aiida calculation. ", action="store_true"
+        )
+        common_parser.add_argument(
+            "-l",
+            "--lowdin",
             action="store_true",
             help="Flag to use Siesta Lowdin version.",
         )
 
-        parser.add_argument(
-            "-nowin",
+        common_parser.add_argument(
+            "-n",
+            "--no-win",
+            dest="nowin",
             action="store_true",
             help="Flag to disable automatic generation of .win file.",
         )
 
-        parser.add_argument(
+        common_parser.add_argument(
             "-v",
+            "--verbose",
+            dest="v",
             action="store_true",
             help="Enable verbosity.",
         )
+
+        subparsers = parser.add_subparsers(dest="calculation", help="Calculation type")
+        dmft_parser = subparsers.add_parser(
+            "dmft",
+            parents=[common_parser],
+            help="Run DMFT. Attempts to resume if previous calculation exists.",
+        )
+        dmft_parser.set_defaults(dmft=True, hf=False)
+
+        hf_parser = subparsers.add_parser(
+            "hf",
+            parents=[common_parser],
+            help="Run Hartree-Fock on the correlated orbitals. Attempts to resume if previous calculation exists.",
+        )
+        hf_parser.set_defaults(dmft=False, hf=True)
 
         args = parser.parse_args()
         DMFTLauncher(args)

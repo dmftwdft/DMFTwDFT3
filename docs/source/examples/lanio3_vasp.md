@@ -37,7 +37,7 @@ The non-charge-self-consistent example has:
 Run from a copied and edited `NCSC` directory:
 
 ```bash
-DMFT.py -dft vasp -dmft
+DMFT.py dmft --dft vasp
 ```
 
 The charge-self-consistent example has:
@@ -50,7 +50,7 @@ The charge-self-consistent example has:
 Run from a copied and edited `CSC` directory:
 
 ```bash
-DMFT.py -dft vasp -dmft
+DMFT.py dmft --dft vasp
 ```
 
 Charge-self-consistent VASP workflows require the VASP-side DMFTwDFT interface described in {doc}`../installation` and {doc}`../library`. Without that interface, use the `NCSC` example as the starting point.

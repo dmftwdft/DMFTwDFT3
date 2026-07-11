@@ -41,13 +41,13 @@ Key settings in `input.toml`:
 Run from a copied and edited example directory:
 
 ```bash
-DMFT.py -dft siesta -structurename SrVO3 -dmft
+DMFT.py dmft --dft siesta --structure-name SrVO3
 ```
 
-For the SIESTA Lowdin path, add `-lowdin`:
+For the SIESTA Lowdin path, add `--lowdin`:
 
 ```bash
-DMFT.py -dft siesta -structurename SrVO3 -lowdin -dmft
+DMFT.py dmft --dft siesta --structure-name SrVO3 --lowdin
 ```
 
-DMFTwDFT generates the Wannier90 input unless `-nowin` is supplied, runs Wannier90 preprocessing to produce `SrVO3.nnkp`, runs SIESTA, then runs Wannier90 and the DMFT loop.
+DMFTwDFT generates the Wannier90 input unless `--no-win` is supplied, runs Wannier90 preprocessing to produce `SrVO3.nnkp`, runs SIESTA, then runs Wannier90 and the DMFT loop.

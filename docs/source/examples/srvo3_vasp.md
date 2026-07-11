@@ -32,12 +32,12 @@ Key settings in `input.toml`:
 Run from a copied and edited example directory:
 
 ```bash
-DMFT.py -dft vasp -dmft
+DMFT.py dmft --dft vasp
 ```
 
 Inspect `DMFT/INFO_ITER` for convergence and `DMFT/G_loc.out`, `DMFT/sig.inp.*`, and impurity directories for the DMFT outputs. After the DMFT run completes, run post-processing from inside `DMFT`:
 
 ```bash
-postDMFT.py ac -siglistindx 2
-postDMFT.py dos -show
+postDMFT.py ac --average 2
+postDMFT.py dos --show
 ```

@@ -1578,7 +1578,10 @@ if __name__ == "__main__":
         # parser for ac
         parser_ac = subparsers.add_parser("ac", help="Analytic Continuation")
         parser_ac.add_argument(
-            "-siglistindx",
+            "-n",
+            "--average",
+            dest="siglistindx",
+            metavar="N",
             default=2,
             type=int,
             help="How many last self energy files to average?",
@@ -1588,126 +1591,192 @@ if __name__ == "__main__":
         # parser for dos
         parser_dos = subparsers.add_parser("dos", help="DMFT Density of States")
         parser_dos.add_argument(
-            "-emin", default=-5.0, type=float, help="Minimum value for interpolation"
+            "--energy-min",
+            dest="emin",
+            metavar="ENERGY_MIN",
+            default=-5.0,
+            type=float,
+            help="Minimum value for interpolation",
         )
         parser_dos.add_argument(
-            "-emax", default=5.0, type=float, help="Maximum value for interpolation"
+            "--energy-max",
+            dest="emax",
+            metavar="ENERGY_MAX",
+            default=5.0,
+            type=float,
+            help="Maximum value for interpolation",
         )
         parser_dos.add_argument(
-            "-sp", action="store_true", help="Flag to plot spin-polarized DOS"
+            "--spin-polarized",
+            dest="sp",
+            action="store_true",
+            help="Flag to plot spin-polarized DOS",
         )
         parser_dos.add_argument(
-            "-rom", default=1000, type=int, help="Matsubara Frequency (omega) points"
+            "-o",
+            "--omega-points",
+            dest="rom",
+            metavar="OMEGA_POINTS",
+            default=1000,
+            type=int,
+            help="Matsubara Frequency (omega) points",
         )
-        parser_dos.add_argument("-broaden", default=0.03, type=float, help="Broadening")
         parser_dos.add_argument(
-            "-show", action="store_true", help="Display the density of states"
+            "-b",
+            "--broadening",
+            dest="broaden",
+            metavar="BROADENING",
+            default=0.03,
+            type=float,
+            help="Broadening",
         )
         parser_dos.add_argument(
-            "-elim", type=float, nargs=2, help="Energy range to plot"
+            "--show", action="store_true", help="Display the density of states"
+        )
+        parser_dos.add_argument(
+            "-e",
+            "--energy-limits",
+            dest="elim",
+            metavar=("ENERGY_MIN", "ENERGY_MAX"),
+            type=float,
+            nargs=2,
+            help="Energy range to plot",
         )
         parser_dos.set_defaults(func="dos")
 
         # parser for bands
         parser_bands = subparsers.add_parser("bands", help="DMFT Bandstructure")
         parser_bands.add_argument(
-            "-elim", type=float, nargs=2, help="Energy range to plot"
+            "-e",
+            "--energy-limits",
+            dest="elim",
+            metavar=("ENERGY_MIN", "ENERGY_MAX"),
+            type=float,
+            nargs=2,
+            help="Energy range to plot",
         )
         parser_bands.add_argument(
-            "-rom", default=1000, type=int, help="Matsubara Frequency (omega) points"
+            "-o",
+            "--omega-points",
+            dest="rom",
+            metavar="OMEGA_POINTS",
+            default=1000,
+            type=int,
+            help="Matsubara Frequency (omega) points",
         )
         parser_bands.add_argument(
-            "-kpband",
+            "--band-k-points",
+            dest="kpband",
+            metavar="K_POINTS",
             default=500,
             type=int,
             help="Number of k-points for band structure calculation",
         )
         parser_bands.add_argument(
-            "-kn",
-            "--knames",
+            "--k-point-names",
+            dest="knames",
+            metavar="NAME",
             default=["$\Gamma$", "$X$", "$M$", "$\Gamma$", "$R$"],
             type=str,
             nargs="+",
             help="Names of the k-points",
         )
         parser_bands.add_argument(
-            "-kp",
-            "--kplist",
+            "--k-point-list",
+            dest="kplist",
+            metavar="COORD",
             default=[[0, 0, 0], [0.5, 0, 0], [0.5, 0.5, 0], [0, 0, 0], [0.5, 0.5, 0.5]],
-            type=int,
+            type=float,
             nargs="+",
             action="append",
             help="List of k-points as an array",
         )
         parser_bands.add_argument(
-            "-autokp",
+            "--auto-k-path",
+            dest="autokp",
             action="store_true",
             help="Flag to use KPOINTS file to obtain k-path.",
         )
         parser_bands.add_argument(
-            "-cmap",
+            "-c",
+            "--colormap",
+            dest="cmap",
+            metavar="COLORMAP",
             default="hot",
             type=str,
             help="Colormap to use for plotting spectral function.",
         )
         parser_bands.add_argument(
-            "-plotplain", action="store_true", help="Flag to plot plain band structure"
+            "--plot-plain",
+            dest="plotplain",
+            action="store_true",
+            help="Flag to plot plain band structure",
         )
         parser_bands.add_argument(
-            "-sp",
+            "--spin-polarized",
+            dest="sp",
             action="store_true",
             help="Flag to plot spin-polarized band structure. Default plots both spin up and spin down plots on the same figure.",
         )
         parser_bands.add_argument(
-            "-spinup",
+            "--spin-up",
+            dest="spinup",
             action="store_true",
             help="Flag to plot spin up band structure separately.",
         )
 
         parser_bands.add_argument(
-            "-spindown",
+            "--spin-down",
+            dest="spindown",
             action="store_true",
             help="Flag to plot spin down band structure separately.",
         )
         parser_bands.add_argument(
-            "-compare",
+            "--compare-dft",
+            dest="compare",
             action="store_true",
             help="Compare with DFT band structure (requires KPOINTS and EIGENVAL).",
         )
         parser_bands.add_argument(
-            "-outcar",
+            "--outcar",
+            metavar="OUTCAR",
             type=str,
             help="SCF OUTCAR file for DFT vs. DMFT band structure comparison.",
             default="OUTCAR",
         )
 
         parser_bands.add_argument(
-            "-plotpartial",
+            "--plot-partial",
+            dest="plotpartial",
             action="store_true",
             help="Flag to plot projected band structure",
         )
         parser_bands.add_argument(
-            "-wo",
-            "--wanorbs",
+            "-w",
+            "--wannier-orbitals",
+            dest="wanorbs",
+            metavar="ORBITAL",
             default=[1, 4],
             type=int,
             nargs="+",
             help="List of Wannier orbitals to project. Ordering follows atom order in structure and the Wannier orbital order. Starts from 1.",
         )
         parser_bands.add_argument(
-            "-vlim",
+            "--value-limits",
+            dest="vlim",
+            metavar=("VALUE_MIN", "VALUE_MAX"),
             type=float,
             nargs=2,
-            help="Spectral intensity range. If -normalize flag is set,\
+            help="Spectral intensity range. If --normalize flag is set,\
             this will correspond to the min and max values of the normalization range.",
         )
         parser_bands.add_argument(
-            "-normalize",
+            "--normalize",
             action="store_true",
-            help="Normalize spectral intensity range. -vlim sets range.",
+            help="Normalize spectral intensity range. --value-limits sets range.",
         )
         parser_bands.add_argument(
-            "-show", action="store_true", help="Display the bands"
+            "--show", action="store_true", help="Display the bands"
         )
         parser_bands.set_defaults(func="bands")
 

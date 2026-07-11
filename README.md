@@ -41,21 +41,21 @@ python setup.py
 Copy the DFT inputs (see [examples](https://github.com/dmftwdft/DMFTwDFT3/tree/master/examples)) along with an `input.toml` file to a working directory and run,
 
 ```shell
-DMFT.py -dft <dft_code> -structurename <name_of_structure> -dmft
+DMFT.py dmft --dft <dft_code> --structure-name <name_of_structure>
 ```
 
 E.g., for SrVO3 with Siesta,
 
 ```shell
-DMFT.py -dft siesta -structurename SrVO3 -dmft
+DMFT.py dmft --dft siesta --structure-name SrVO3
 ```
 
 Afterwards, for post-processing run,
 
 ```shell
-postDMFT.py ac -siglistindx 4
+postDMFT.py ac --average 4
 postDMFT.py dos
-postDMFT.py bands -plotplain
+postDMFT.py bands --plot-plain
 ```
 
 Refer to the [documentation](https://dmftwdft.github.io/DMFTwDFT3) to learn more about using DMFTwDFT and its features.
