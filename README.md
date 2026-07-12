@@ -44,7 +44,7 @@ Copy the DFT inputs (see [examples](https://github.com/dmftwdft/DMFTwDFT3/tree/m
 DMFT.py dmft --dft <dft_code> --structure-name <name_of_structure>
 ```
 
-E.g., for SrVO3 with Siesta,
+E.g., for SrVO$_3$ with Siesta,
 
 ```shell
 DMFT.py dmft --dft siesta --structure-name SrVO3
