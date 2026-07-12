@@ -1,4 +1,4 @@
-## Developers
+# Developers
 
 - Hyowon Park (University of Illinois at Chicago)
 - Aldo Romero (West Virginia University)
