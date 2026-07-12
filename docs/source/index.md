@@ -24,7 +24,7 @@ The framework enables the characterization of both weakly and strongly correlate
 :alt: DFT+DMFT workflow
 :align: center
 
-Flow diagram of a charge self-consistent DFT+DMFT calculation implemented using the MLWF basis set. Ref: [[Park *et al.* Phys. Rev. B 90, 235103 (2014)](Park et al. Phys. Rev. B 90, 235103 (2014))].
+Flow diagram of a charge self-consistent DFT+DMFT calculation implemented using the MLWF basis set. Ref: [Park *et al.*, Phys. Rev. B **90**, 235103 (2014)](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.90.235103).
 ```
 
 ## Why DMFTwDFT?
