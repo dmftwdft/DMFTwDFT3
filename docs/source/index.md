@@ -39,12 +39,7 @@ DMFTwDFT offers the following,
 
 4. The library mode links the module for computing a DMFT density matrix and updating a charge density within DFT loops without significant DFT source-code changes to enable full-charge self-consistent DFT+DMFT calculations.
 
-DMFTwDFT consists of two main scripts to perform DFT+DMFT calculations:
-
-- `DMFT.py`: performs DFT and DMFT calculations.
-- `postDMFT.py`: performs post-processing including analytic continuation, density of states, and band structures.
-
-The `utilities` directory contains optional helper scripts for plotting and analysis.
+DMFTwDFT is organized around a simple command-line workflow; `DMFT.py` runs the main DFT+DMFT or Hartree-Fock calculation, `postDMFT.py` handles post-processing, and the `utilities` directory provides additional plotting, analysis, and diagnostic tools.
 
 ```{toctree}
 :hidden:
