@@ -4,9 +4,9 @@ DMFTwDFT3 is configured for Python 3.11 environments.
 
 The installation has three parts,
 
-1. Create the Python environment.
+1. Create a Python environment.
 2. Choose and edit the root `Makefile.in` build configuration.
-3. Run `setup.py`, which builds the internal and external components and installs them into `bin`. This step also sets up the environmental variables.
+3. Run `setup.py`, which builds the internal and external components and installs them into `bin`. This step also sets up the required environmental variables.
 
 ## Python Environment
 
@@ -15,7 +15,7 @@ Recommended environment files are provided in the repository root,
 - Linux: `environment.yml`
 - macOS: `environment.macos.yml`
 
-For example, on Linux:
+For example, on Linux,
 
 ```bash
 mamba env create -f environment.yml
@@ -24,7 +24,7 @@ mamba activate dmft
 
 ## Build Configuration
 
-Copy one template from `config` to the repository root as `Makefile.in`, then edit paths and compiler choices for your machine.
+Copy a template from `config` to the repository root as `Makefile.in`, then edit paths and compiler choices for your machine.
 
 ```bash
 cp config/Makefile.in.gnu Makefile.in
@@ -71,7 +71,7 @@ Most of the necessary libraries for the Intel setup will come from the Intel MKL
 
 ### macOS Apple Silicon
 
-For Apple Silicon, start from:
+For Apple Silicon, start from,
 
 ```bash
 mamba env create -f environment.macos.yml
@@ -84,7 +84,7 @@ Use one MPI implementation end-to-end. The macOS template is intended for Homebr
 
 Keep every compiled component on the same architecture and MPI stack. On Apple Silicon, use Homebrew OpenMPI consistently for `mpirun`, `mpi4py`, DMFTwDFT, CTQMC, Wannier90, and DFT interfaces.
 
-Do not mix Homebrew OpenMPI with conda MPICH-linked components. In particular, make sure these components use the same MPI ABI:
+Do not mix Homebrew OpenMPI with conda MPICH-linked components. In particular, make sure these components use the same MPI ABI,
 
 - `mpi4py`
 - `dmft.x`
@@ -99,7 +99,7 @@ On Apple Silicon, also keep every compiled component native `arm64`. Do not mix 
 
 ## Setup Output
 
-If compilation succeeds, the following executables and libraries are copied to `bin`:
+If compilation succeeds, the following executables and libraries are copied to `bin`,
 
 - `dmft.x`: performs the DMFT k-point sum and computes `G_loc.out` and `Delta.inp`.
 - `dmft_dos.x`: performs DOS calculation.
@@ -111,12 +111,12 @@ If compilation succeeds, the following executables and libraries are copied to `
 
 ## Shell Setup
 
-`setup.py` automatically updates your default shell startup file so the main commands and utilities are available from the shell. It adds `bin` and `utilities` to `PATH`, and adds `bin` to `PYTHONPATH` for DMFTwDFT Python imports:
+`setup.py` automatically updates your default shell startup file so the main commands and utilities are available from the shell. It adds `bin` and `utilities` to `PATH`, and adds `bin` to `PYTHONPATH` for DMFTwDFT Python imports,
 
 - `~/.zshrc` when `$SHELL` is zsh
 - `~/.bashrc` otherwise
 
-The block looks like this:
+The block looks like the following.
 
 ```bash
 # >>> DMFTwDFT setup >>>
@@ -133,7 +133,7 @@ Restart your shell after setup, or source the file printed by `setup.py`.
 DMFTwDFT requires `wannier90.x` and `w90chk2chk.x` to be available in `bin` or otherwise resolvable in your environment. You can get them from [Wannier90](http://www.wannier.org/). VASP workflows also require VASP to be compiled with Wannier90 support.
 
 ```{note}
-`w90chk2chk.x` has historically been more reliable with Wannier90 v2.1.0 than with some newer Wannier90 releases.
+Newer versions of `w90chk2chk.x` may not be compatible with DMFTwDFT, so we recommend using the v2.1.0 release of Wannier90. `wannier90.x` from Wannier90 v3.1.0 is compatible with DMFTwDFT.
 ```
 
 For MPI workflows, build Wannier90 against the same MPI implementation used by DMFTwDFT and the DFT code.
@@ -147,8 +147,8 @@ For VASP,
 1. Generate `libdmft.a` by compiling DMFTwDFT.
 2. Add `libdmft.a` and required libraries/objects to the VASP `makefile.include` link line.
 3. Install VASP once before modifying source files.
-4. Copy the modified `mlwf.F` from `sources/CSC-mods` into the VASP source tree and rebuild to create dependencies.
+4. Copy the modified `mlwf.F` from `sources/CSC-mods` into the VASP source tree and rebuild (without cleaning the build) to create dependencies.
 5. Copy the other required modified files, such as `charge.F`, `electron.F`, `main.F`, and `us.F`, from `sources/CSC-mods`.
-6. Recompile VASP, rename the executable to `vaspDMFT`, and copy it to the DMFTwDFT `bin` directory.
+6. Recompile VASP (without cleaning the build), rename the executable to `vaspDMFT`, and copy it to the DMFTwDFT `bin` directory.
 
 More information on library mode can be found in {ref}`labellibrary`.
