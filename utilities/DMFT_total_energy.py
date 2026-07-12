@@ -3,8 +3,6 @@
 import argparse
 import os
 
-import numpy as np
-import pandas as pd
 import statistics
 from scipy.stats import sem
 from statistics import StatisticsError
@@ -16,6 +14,8 @@ def store_data(args):
     """
 
     if args.batch:
+        import pandas as pd
+
         # Batch job assuming folders are named as 1, 2, .... n for each DMFT calculation.
 
         # creating dataframe
@@ -236,10 +236,19 @@ if __name__ == "__main__":
     )
     # parser.add_argument("path", type=str, default=".", help="Path to root directory.")
     parser.add_argument(
-        "-navg", type=int, default="1", help="Number of last iterations to average."
+        "-n",
+        "--average",
+        dest="navg",
+        metavar="N",
+        type=int,
+        default=1,
+        help="Number of last iterations to average.",
     )
     parser.add_argument(
-        "-batch", action="store_true", help="Batch job for multiple DMFT calculations. Assumes DMFT calculations are in folders with sequential integer names."
+        "-b",
+        "--batch",
+        action="store_true",
+        help="Batch job for multiple DMFT calculations. Assumes DMFT calculations are in folders with sequential integer names.",
     )
 
     args = parser.parse_args()

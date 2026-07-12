@@ -28,7 +28,9 @@ import VASP
 from input_loader import load_input
 
 
-p, pC, pD = load_input()
+p = None
+pC = None
+pD = None
 
 
 def print_subprocess_output(output):
@@ -567,7 +569,8 @@ if __name__ == "__main__":
         )
 
         parser.add_argument(
-            "-dft",
+            "-d",
+            "--dft",
             default="vasp",
             type=str,
             help="Choice of DFT code.",
@@ -575,21 +578,34 @@ if __name__ == "__main__":
         )
 
         parser.add_argument(
-            "-structurename",
+            "-s",
+            "--structure-name",
+            dest="structurename",
+            metavar="STRUCTURE_NAME",
             type=str,
             help="Name of the structure. Not required for VASP. ",
             default=None,
         )
 
-        parser.add_argument("-np", default=1, type=int, help="Number of processors.")
+        parser.add_argument(
+            "-p",
+            "--num-processes",
+            dest="np",
+            metavar="NUM_PROCESSES",
+            default=1,
+            type=int,
+            help="Number of processors.",
+        )
 
         parser.add_argument(
-            "-nowin",
+            "--no-win",
+            dest="nowin",
             action="store_true",
             help="Flag to disable automatic generation of .win file.",
         )
 
         args = parser.parse_args()
+        p, pC, pD = load_input()
         ElectronOccupation(args)
 
     else:

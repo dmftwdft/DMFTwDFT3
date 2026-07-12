@@ -16,8 +16,8 @@ of "cor_orb".
 
 Usage:
 
-    Z.py -siglistindex <# of self energy files to avergae>
-         -cor_orb_index <index of cor_orb>
+    Z.py --average <# of self energy files to average>
+         --cor-orb-index <index of cor_orb>
 
 """
 
@@ -120,13 +120,19 @@ if __name__ == "__main__":
             description=__doc__, formatter_class=RawTextHelpFormatter
         )
         parser.add_argument(
-            "-siglistindex",
+            "-n",
+            "--average",
+            dest="siglistindex",
+            metavar="N",
             type=int,
             default=1,
             help="How many last self energy files to average?",
         )
         parser.add_argument(
-            "-cor_orb_index",
+            "-i",
+            "--cor-orb-index",
+            dest="cor_orb_index",
+            metavar="INDEX",
             type=int,
             default=1,
             help="cor_orb index (starting from 1).",

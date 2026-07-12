@@ -16,16 +16,23 @@ hermitiancheck.py numberofbands numberofkpoints <optional: filename>
 
 """
 import numpy as np
-import sys
 import scipy.linalg as la
+import argparse
 
-numberofbands = int(sys.argv[1])
-numberofkpoints = int(sys.argv[2])
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("number_of_bands", type=int, help="Number of bands.")
+parser.add_argument("number_of_kpoints", type=int, help="Number of k-points.")
+parser.add_argument(
+    "filename",
+    nargs="?",
+    default="dmft-nkij.dat",
+    help="DMFT occupancy matrix file.",
+)
+args = parser.parse_args()
 
-if len(sys.argv) > 3:
-    fname = sys.argv[3]
-else:
-    fname = "dmft-nkij.dat"
+numberofbands = args.number_of_bands
+numberofkpoints = args.number_of_kpoints
+fname = args.filename
 
 fi = open(fname, "r")
 header = fi.readline()

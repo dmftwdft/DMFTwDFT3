@@ -147,13 +147,21 @@ if __name__ == "__main__":
         description="This script checks to see if the DMFT/HF calculation is complete."
     )
     parser.add_argument(
-        "-type", type=str, default="dmft", help="DMFT or HF", choices=["dmft", "hf"]
+        "-t",
+        "--type",
+        type=str,
+        default="dmft",
+        help="DMFT or HF",
+        choices=["dmft", "hf"],
     )
     parser.add_argument(
-        "-p","--pattern", type=str, help="Regex to match folder names containing DMFT calculations."
+        "-p",
+        "--pattern",
+        type=str,
+        help="Prefix to match folder names containing DMFT calculations.",
     )
     parser.add_argument(
-        "-po","--post",
+        "--post",
         type=str,
         default=None,
         help="Check for post-processing completeness.",

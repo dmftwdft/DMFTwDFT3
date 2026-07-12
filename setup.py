@@ -156,11 +156,13 @@ def write_edmft_makefile(base_makefile_path, edmft_src_dir):
         fp.write(makefile)
 
 
-def shell_init_block(bin_dir):
+def shell_init_block(bin_dir, utilities_dir):
     bin_dir = os.path.join(bin_dir, "")
+    utilities_dir = os.path.join(utilities_dir, "")
     return "\n".join(
         [
             SHELL_BLOCK_START,
+            'export PATH="%s:$PATH"' % utilities_dir,
             'export PATH="%s:$PATH"' % bin_dir,
             'export PYTHONPATH="%s:$PYTHONPATH"' % bin_dir,
             SHELL_BLOCK_END,
@@ -176,9 +178,9 @@ def default_shell_init_file():
     return os.path.expanduser("~/.bashrc")
 
 
-def update_shell_init(bin_dir):
+def update_shell_init(bin_dir, utilities_dir):
     shell_init_file = default_shell_init_file()
-    block = shell_init_block(bin_dir)
+    block = shell_init_block(bin_dir, utilities_dir)
 
     if os.path.exists(shell_init_file):
         with open(shell_init_file, "r") as fp:
@@ -374,7 +376,8 @@ def main(args):
     # Compilation complete
     print("DMFTwDFT compilation complete!")
     bin_dir = os.path.abspath("./bin")
-    shell_init_file, action = update_shell_init(bin_dir)
+    utilities_dir = os.path.abspath("./utilities")
+    shell_init_file, action = update_shell_init(bin_dir, utilities_dir)
     print("%s DMFTwDFT PATH/PYTHONPATH settings in %s." % (action, shell_init_file))
     print("Restart your shell or run: source %s" % shell_init_file)
     print("Thank you!")

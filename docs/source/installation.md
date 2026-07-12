@@ -111,7 +111,7 @@ If compilation succeeds, the following executables and libraries are copied to `
 
 ## Shell Setup
 
-`setup.py` automatically adds the DMFTwDFT `bin` directory to `PATH` and `PYTHONPATH` in your default shell startup file:
+`setup.py` automatically updates your default shell startup file so the main commands and utilities are available from the shell. It adds `bin` and `utilities` to `PATH`, and adds `bin` to `PYTHONPATH` for DMFTwDFT Python imports:
 
 - `~/.zshrc` when `$SHELL` is zsh
 - `~/.bashrc` otherwise
@@ -120,6 +120,7 @@ The block looks like this:
 
 ```bash
 # >>> DMFTwDFT setup >>>
+export PATH="/path/to/DMFTwDFT3/utilities/:$PATH"
 export PATH="/path/to/DMFTwDFT3/bin/:$PATH"
 export PYTHONPATH="/path/to/DMFTwDFT3/bin/:$PYTHONPATH"
 # <<< DMFTwDFT setup <<<

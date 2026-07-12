@@ -19,17 +19,17 @@ Run this script inside the DMFT folder.
 Usage:
 
     plotDMFT.py
-            -siglistindex <# of self energy files to average>
-            -cor_orb_index <List of cor_orb indexes >
-            -cor_orb_labels <Names of cor_orb's>
+            --average <# of self energy files to average>
+            --cor-orb-index <List of cor_orb indexes>
+            --cor-orb-labels <Names of cor_orb's>
 
 E.g.- for correlated d-orbitals considering eg and t2g i.e.
 "cor_orb":   [[['d_z2','d_x2y2'],['d_xz','d_yz','d_xy']]]
 
-plotDMFT.py -siglistindex 5 -cor_orb_index 1 2 -cor_orb_labels '$e_g$' '$t_{2g}$'
+plotDMFT.py --average 5 --cor-orb-index 1 2 --cor-orb-labels '$e_g$' '$t_{2g}$'
 
 
-NOTE: siglistindex is only used to average the sig.inp files. Not used for Green's functions
+NOTE: --average is only used to average the sig.inp files. Not used for Green's functions
 (G_loc) or analytically continued self energy (Sig.out).
 Sig.out should be present inside the ac directory  to plot the analytically continued self energy.
 """
@@ -261,26 +261,43 @@ if __name__ == "__main__":
             description=__doc__, formatter_class=RawTextHelpFormatter
         )
         parser.add_argument(
-            "-siglistindex",
+            "-n",
+            "--average",
+            dest="siglistindex",
+            metavar="N",
             type=int,
             default=1,
             help="How many self energy files (sig.inp.x.x) to average?",
         )
         parser.add_argument(
-            "-cor_orb_index",
+            "-i",
+            "--cor-orb-index",
+            dest="cor_orb_index",
+            metavar="INDEX",
             type=int,
             nargs="+",
             default=[1],
             help="List of cor_orb indexes (starting from 1).",
         )
         parser.add_argument(
-            "-cor_orb_labels",
+            "-l",
+            "--cor-orb-labels",
+            dest="cor_orb_labels",
+            metavar="LABEL",
             type=str,
             nargs="+",
             default=["orbital1"],
             help="List of cor_orb names.",
         )
-        parser.add_argument("-xlim", type=float, nargs=2, help="x-axis range to plot")
+        parser.add_argument(
+            "-x",
+            "--x-limits",
+            dest="xlim",
+            metavar=("X_MIN", "X_MAX"),
+            type=float,
+            nargs=2,
+            help="x-axis range to plot",
+        )
         args = parser.parse_args()
         plot_dmft(args)
     else:
