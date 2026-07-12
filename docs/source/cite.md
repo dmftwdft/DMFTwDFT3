@@ -2,8 +2,8 @@
 
 If you have used DMFTwDFT in your work, please cite,
 
-<div class="admonition">
-<p>
+<div style="border: 1px solid var(--color-background-border); border-radius: 0.5rem; padding: 1rem 1.25rem; background: var(--color-background-secondary); margin: 1rem 0;">
+<p style="margin: 0;">
 V. Singh, U. Herath, B. Wah, X. Liao, A. H. Romero, and H. Park,<br>
 "DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various density functional theory packages,"<br>
 <em>Computer Physics Communications</em> <strong>261</strong>, 107778 (2021).<br>

@@ -79,10 +79,10 @@ Refer to the [documentation](https://dmftwdft.github.io/DMFTwDFT3) to learn more
 
 If you have used DMFTwDFT in your work, please cite,
 
-V. Singh, U. Herath, B. Wah, X. Liao, A. H. Romero, and H. Park,
-"DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various density functional theory packages,"
-Computer Physics Communications 261, 107778 (2021).
-[https://doi.org/10.1016/j.cpc.2020.107778](https://doi.org/10.1016/j.cpc.2020.107778)
+> V. Singh, U. Herath, B. Wah, X. Liao, A. H. Romero, and H. Park,<br>
+> "DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various density functional theory packages,"<br>
+> *Computer Physics Communications* **261**, 107778 (2021).<br>
+> [https://doi.org/10.1016/j.cpc.2020.107778](https://doi.org/10.1016/j.cpc.2020.107778)
 
 BibTex,
 
