@@ -86,7 +86,7 @@ Computer Physics Communications 261, 107778 (2021).
 
 BibTex,
 
-```
+```bibtex
 @article{SINGH2021107778,
     title = "DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various density functional theory packages",
     journal = "Computer Physics Communications",
