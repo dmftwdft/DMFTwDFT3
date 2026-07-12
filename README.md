@@ -86,7 +86,8 @@ Computer Physics Communications 261, 107778 (2021).
 
 BibTex,
 
-    @article{SINGH2021107778,
+```
+@article{SINGH2021107778,
     title = "DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various density functional theory packages",
     journal = "Computer Physics Communications",
     volume = "261",
@@ -98,6 +99,7 @@ BibTex,
     author = "Vijay Singh and Uthpala Herath and Benny Wah and Xingyu Liao and Aldo H. Romero and Hyowon Park",
     keywords = "DFT, DMFT, Strongly correlated materials, Python, Condensed matter physics, Many-body physics",
     }
+```
 
 ## Mailing list
 
