@@ -115,7 +115,7 @@ The main runtime files are written inside the generated `DMFT` or `HF` directory
 
 During a run, `INFO_ITER` is usually the first file to inspect. It records the total or outer DFT+DMFT iteration, the inner DMFT iteration, lattice and impurity occupancies, self-energy and double-counting related quantities, two total-energy estimates, and the charge difference between consecutive charge updates.
 
-A typical `INFO_ITER` block has the form:
+A typical `INFO_ITER` block has the form,
 
 ```text
 DFT_iter DMFT_iter Nd_latt Nd_imp (Sigoo-Vdc)_latt (Sigoo-Vdc)_imp TOT_E(Tr(SigG)) TOT_E(EPOT_imp) charge_diff
@@ -168,7 +168,7 @@ postDMFT.py bands --spin-polarized
 postDMFT.py bands --compare-dft
 ```
 
-For projected bands, `--wannier-orbitals` uses 1-based Wannier orbital indices. The ordering follows the atom order in the structure and the Wannier orbital order.
+For projected bands, `--wannier-orbitals` uses Wannier orbital indices. The ordering follows the atom order in the structure and the Wannier orbital order.
 
 The DMFT band structure is represented by the k-resolved spectral function,
 
@@ -176,16 +176,18 @@ The DMFT band structure is represented by the k-resolved spectral function,
 A(k, \omega) = \frac{i}{2\pi}\mathrm{Tr}\left[G(k, \omega) - G^{\dagger}(k, \omega)\right]
 ```
 
-where the interacting Green's function is constructed from the DFT/Wannier eigenvalues, the chemical potential, and the DMFT self-energy,
+where, the interacting Green's function ($G(k, i\omega_n)$) is constructed from the DFT eigenvalues, the chemical potential, and the DMFT self-energy,
 
 ```{math}
 G(k, i\omega_n) = \frac{1}{i\omega_n - \epsilon_k + \mu - \Sigma(i\omega_n)}
 ```
 
-Here `omega_n` is a Matsubara frequency, `epsilon_k` is the DFT/Wannier eigenvalue, `mu` is the chemical potential, and `Sigma` is the self-energy ($\Sigma(i\omega_n)$). After analytic continuation, the real-axis spectral function is plotted by `postDMFT.py bands`.
+Here, $\omega_n$ is a Matsubara frequency, $\epsilon_k$ is the DFT eigenvalue, $\mu$ is the chemical potential, and ($\Sigma(i\omega_n)$) is the self-energy. After analytic continuation, the real-axis spectral function is plotted by `postDMFT.py bands`.
 
-The DMFT density of states is obtained by summing the spectral function over k-points,
+The DMFT density of states $A(\omega)$ is obtained by summing the spectral function over k-points,
 
 ```{math}
 A(\omega) = \sum_k A(k, \omega)
 ```
+
+and is plot with `postDMFT.py dos`.
