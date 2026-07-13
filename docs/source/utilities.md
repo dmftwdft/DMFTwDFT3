@@ -33,7 +33,7 @@ The order of the columns are,
 
 Usage,
 
-```shell
+```text
 plotDMFT.py
     --average <# of self energy files to average>
     --cor-orb-index <List of cor_orb indexes>
@@ -79,7 +79,7 @@ of "cor_orb".
 
 Usage,
 
-```shell
+```text
 Z.py --average <# of self energy files to average>
      --cor-orb-index <index of cor_orb>
 ```
