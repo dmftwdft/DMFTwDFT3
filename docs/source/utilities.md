@@ -1,21 +1,10 @@
 # Utilities
 
-The `utilities` directory contains optional helper scripts for plotting, analysis, batch checks, and specialized debugging. These are separate from the main workflow commands `DMFT.py` and `postDMFT.py`.
+The `utilities` directory contains helper scripts for plotting, analysis, and debugging tasks. These are separate from the main workflow commands `DMFT.py` and `postDMFT.py`.
 
-Most users should start with:
+After running `setup.py` and restarting or sourcing your shell startup file, the `utilities` directory should already be available through `PATH`, and the `bin` directory should be available through both `PATH` and `PYTHONPATH`.
 
-```bash
-DMFT.py -h
-postDMFT.py -h
-```
-
-Use the utilities when you need lower-level analysis or a quick diagnostic that is not covered by the main workflow.
-
-## Running Utilities
-
-The utilities are not a replacement for `DMFT.py` or `postDMFT.py`. After running `setup.py` and restarting or sourcing your shell startup file, the `utilities` directory should already be available through `PATH`, and the `bin` directory should be available through both `PATH` and `PYTHONPATH`.
-
-You can then run utilities by name from the expected working directory, for example:
+You can then run utilities by name from the expected working directory, for example,
 
 ```bash
 plotDMFT.py -h
@@ -27,66 +16,127 @@ If your shell has not been refreshed or you have not installed the path settings
 python /path/to/DMFTwDFT3/utilities/plotDMFT.py -h
 ```
 
-If the command name is not found after setup, restart the shell or source the startup file printed by `setup.py`.
-
 ## Plotting and Analysis
 
-`plotDMFT.py`
-: Run from a completed `DMFT` directory. Plots real and imaginary parts of `G_loc.out.*`, averaged `sig.inp.*`, and optionally `ac/Sig.out`. Writes PDFs under `plots`.
+### 1. `plotDMFT.py`
 
-```bash
-python /path/to/DMFTwDFT3/utilities/plotDMFT.py \
-  --average 5 \
-  --cor-orb-index 1 2 \
-  --cor-orb-labels '$e_g$' '$t_{2g}$'
+Plots real and imaginary parts of the Green's function `G_loc.out`, averaged self-energy `sig.inp.*`, and optionally analytically continued self-energy (if available) `ac/Sig.out`. Generates figures under `plots`.
+Run from a completed `DMFT` directory.
+
+The order of the columns are,
+
+```text
+|---------------------| |-----------------------|----------------------------|
+| Matsubara Frequency | | Real part of SE       | Imaginary part SE          | x Repeats for each group
+|---------------------| |-----------------------|----------------------------|   of "cor_orb".
 ```
 
-`plotDMFTDOS.py`
-: Run from a directory containing `G_loc.out` from a DOS run. Produces a simple projected DOS plot, `DMFT-PDOS.png`. This script has hard-coded orbital-column assumptions and may need editing for other orbital orderings.
+Usage,
 
-```bash
-python /path/to/DMFTwDFT3/utilities/plotDMFTDOS.py
+```shell
+plotDMFT.py
+    --average <# of self energy files to average>
+    --cor-orb-index <List of cor_orb indexes>
+    --cor-orb-labels <Names of cor_orb's>
 ```
 
-`Z.py`
-: Run from a completed `DMFT` directory. Estimates quasiparticle residue and effective mass from the low-frequency imaginary-axis self-energy files `sig.inp.*`.
+E.g., for correlated d-orbitals considering eg and t2g i.e.
 
-```bash
-python /path/to/DMFTwDFT3/utilities/Z.py --average 5 --cor-orb-index 1
+```
+"cor_orb": [[['d_z2','d_x2y2'],['d_xz','d_yz','d_xy']]]
 ```
 
-`DMFT_total_energy.py`
-: Run from a directory containing one `DMFT` run, or from a batch root with numbered run directories. Reads `DMFT/INFO_ITER` and reports or tabulates averaged total-energy estimates.
+run,
 
-```bash
-python /path/to/DMFTwDFT3/utilities/DMFT_total_energy.py --average 5
+```shell
+plotDMFT.py --average 5 --cor-orb-index 1 2 --cor-orb-labels '$e_g$' '$t_{2g}$'
 ```
 
-## Batch Checks and Diagnostics
+### 2. `plotDMFTDOS.py`
 
-`electron_count.py`
-: Run from a DFT/DMFT setup directory with `input.toml` and DFT inputs. Estimates the total electron count in the Wannier manifold. This can help set `n_tot`.
-
-```bash
-python /path/to/DMFTwDFT3/utilities/electron_count.py --dft siesta --structure-name SrVO3
-```
-
-`countDMFT.py`
-: Run from a batch root containing `DMFT` or `HF` directories, or numbered run directories. Checks whether DMFT/HF runs and selected post-processing steps are complete. Writes incomplete-run lists.
+Produces a simple projected DOS plot, `DMFT-PDOS.png`. This script has hard-coded orbital-column assumptions and may need editing for other orbital orderings. Intended for manual investigation of DOS results, when `postDMFT.py dos` is not sufficient.
+Run from a directory containing `G_loc.out` from a DOS run.
 
 ```bash
-python /path/to/DMFTwDFT3/utilities/countDMFT.py --type dmft
-python /path/to/DMFTwDFT3/utilities/countDMFT.py --type dmft --post ac dos
-python /path/to/DMFTwDFT3/utilities/countDMFT.py --type dmft --pattern vacancy
+plotDMFTDOS.py
 ```
 
-`hermitiancheck.py`
-: Run from a directory containing `dmft-nkij.dat` or a specified equivalent file. Checks Hermiticity of a DMFT occupancy matrix dump and writes eigenvalue/diagonal summaries.
+### 3. `Z.py`
+
+Estimates quasi-particle residue (Z) and effective mass (m*/m) from the imaginary-axis self-energy files `sig.inp.*`. Averages a given number of self-energy files.
+Run from a completed `DMFT` directory.
+
+The order of the columns in sig.inp are,
+
+```
+
+|---------------------| |-----------------------|----------------------------|
+| Matsubara Frequency | | Real part of SE       | Imaginary part SE          |  x Repeats for each group
+|---------------------| |-----------------------|----------------------------|
+
+of "cor_orb".
+```
+
+Usage,
+
+```shell
+Z.py --average <# of self energy files to average>
+     --cor-orb-index <index of cor_orb>
+```
+
+For example,
 
 ```bash
-python /path/to/DMFTwDFT3/utilities/hermitiancheck.py 28 512 dmft-nkij.dat
+Z.py --average 5 --cor-orb-index 1
 ```
 
-## Current Path
+### 4. `DMFT_total_energy.py`
 
-The directory was renamed from `scripts` to `utilities` to better describe its role. Current documentation uses `utilities`; older PDFs or notes may still refer to `/scripts`.
+Reads `DMFT/INFO_ITER` and reports or tabulates averaged total-energy estimates. Run from a directory containing one `DMFT` run, or from a batch root with numbered run directories.
+
+```bash
+DMFT_total_energy.py --average 5
+```
+
+## Diagnostics
+
+### 1. `electron_count.py`
+
+Estimates the total electron count in the Wannier manifold. This can help set `n_tot` in `input.toml`.
+Run from a directory with `input.toml` and DFT inputs. It takes the `atomnames`, `orbs`, `cor_at` and `cor_orb` from `input.toml`.
+
+E.g., for a SrVO$_3$ SIESTA setup, run,
+
+```bash
+electron_count.py --dft siesta --structure-name SrVO3
+```
+
+### 2. `countDMFT.py`
+
+Checks whether DMFT/HF runs and selected post-processing steps are complete. Writes incomplete-run lists. Run from a batch root containing `DMFT` or `HF` directories, or numbered run directories. Use the flag `--pattern` to match folder name prefixes containing DMFT calculations.
+
+```bash
+countDMFT.py --type dmft
+countDMFT.py --type dmft --post ac dos
+countDMFT.py --type dmft --pattern vacancy
+```
+
+### 3. `hermitiancheck.py`
+
+Checks Hermiticity of a DMFT occupancy matrix ($n_{kij}$) and writes eigenvalue/diagonal summaries. Run from a directory containing `dmft-nkij.dat`. This is generated when performing full charge self-consistent DMFT runs or through the DMFT library mode.
+
+The shape of $n_{kij}$ : [iband, jband, kpoints]
+
+The way $n_{kij}$ is saved in dmft-nkij.dat is with jband being the fastest index, iband being the next fastest and kpoints being the slowest index.
+
+Usage,
+
+```shell
+hermitiancheck.py numberofbands numberofkpoints <optional: filename>
+```
+
+E.g., for a SrVO$_3$ DMFT run with 28 bands and 512 k-points, run,
+
+```bash
+hermitiancheck.py 28 512 dmft-nkij.dat
+```

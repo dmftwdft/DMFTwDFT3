@@ -470,12 +470,11 @@ class ElectronOccupation:
             cmd = (
                 "mpirun -np" + " " + str(self.np) + " " + "wannier90.x" + " " + filename
             )
-            out, err = subprocess.Popen(
-                cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            ).communicate()
+            returncode, out, err = run_command(cmd)
+            print_subprocess_output(out)
+            print_subprocess_output(err)
             if os.path.isfile("wannier90.chk"):
                 print("wannier90 calculation complete.")
-                print(out)  # , err
             else:
                 print("wannier90 calculation failed! Exiting.")
                 sys.exit()
@@ -505,7 +504,7 @@ class ElectronOccupation:
         for i in range(NUM_OF_ORBT):
             print(("%s th iteration is running" % (i + 1)))
             fi = open("wannier90.win", "r")
-            WIN = array(fi.readlines())
+            WIN = np.array(fi.readlines())
             fi.close()
             WIN[LINE_dos - 1] = "dos_project=" + str(i + 1) + "\n"
             fi = open("wannier90.win", "w")
@@ -523,9 +522,9 @@ class ElectronOccupation:
     def Load_DOS(self, filename, Fermi):
         fi = open(filename, "r")
         dos = fi.readlines()
-        xy = zeros((len(dos), 2))
+        xy = np.zeros((len(dos), 2))
         for i, den in enumerate(dos):
-            xy[i] = array(array(den.split()).astype(float))
+            xy[i] = np.array(den.split()).astype(float)
             xy[i][0] -= Fermi
         fi.close()
         return xy

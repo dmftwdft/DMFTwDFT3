@@ -1,13 +1,13 @@
-# LaNiO3 With VASP
+# LaNiO3
 
-Source directories:
+Source directories,
 
 - `examples/LaNiO3_vasp/NCSC`
 - `examples/LaNiO3_vasp/CSC`
 
-These examples reproduce the LaNiO3 material used throughout the historical PDF tutorials. The non-charge-self-consistent and charge-self-consistent examples use the same Ni `d` plus O `p` Wannier subspace but different loop settings.
+The non-charge-self-consistent and charge-self-consistent examples use the same Ni-$d$ $+$ O-$p$ Wannier subspace but different loop settings.
 
-Included files in each subdirectory:
+Included files in each subdirectory,
 
 - `input.toml`
 - `INCAR`
@@ -15,16 +15,9 @@ Included files in each subdirectory:
 - `POSCAR`
 - `submit.sh`
 
-Files you must provide or edit:
+See {doc}`vasp` for general VASP setup requirements, including `POTCAR`, `path_bin`, MPI launcher, and executable setup.
 
-- `POTCAR`, because VASP pseudopotentials are not distributed with the repository.
-- `path_bin` in `input.toml`.
-- `para_com.dat`, or an updated submission script that writes it.
-- VASP executable setup in your environment or DMFTwDFT `bin` directory.
-
-The bundled `submit.sh` files are historical cluster scripts. They contain site-specific modules and call `RUNDMFT.py` directly. For current usage, prefer `DMFT.py` unless you are intentionally debugging the lower-level runner.
-
-The non-charge-self-consistent example has:
+The non-charge-self-consistent example has,
 
 - `Niter = 1`
 - `Nit = 15`
@@ -34,25 +27,25 @@ The non-charge-self-consistent example has:
 - `cor_at = [["Ni1", "Ni2"]]`
 - `ewin = [-8, 3.1]`
 
-Run from a copied and edited `NCSC` directory:
+The charge-self-consistent example has,
 
-```bash
-DMFT.py dmft --dft vasp
-```
-
-The charge-self-consistent example has:
-
-- `Niter = 30`
+- `Niter = 15`
 - `Ndft = 10`
 - `Nit = 1`
 - The same Ni/O correlated subspace settings as the NCSC case.
 
-Run from a copied and edited `CSC` directory:
+Run from a copied and edited `CSC` or `NCSC` directory,
 
 ```bash
-DMFT.py dmft --dft vasp
+DMFT.py dmft --dft vasp -v
 ```
 
 Charge-self-consistent VASP workflows require the VASP-side DMFTwDFT interface described in {doc}`../installation` and {doc}`../library`. Without that interface, use the `NCSC` example as the starting point.
 
-The key convergence file is `DMFT/INFO_ITER`. For LaNiO3, compare `Nd_latt` with `Nd_imp`, compare the lattice and impurity `(Sigoo - Vdc)` columns, and monitor the charge-difference column in the CSC run.
+The convergence is logged in `DMFT/INFO_ITER`. Compare `Nd_latt` with `Nd_imp`, compare the lattice and impurity `(Sigoo - Vdc)` columns, and monitor the charge-difference column in the CSC run. Then perform post-processing from inside `DMFT`,
+
+```bash
+postDMFT.py ac --average 5
+postDMFT.py dos
+postDMFT.py bands --plot-plain --omega-points 1000 --band-k-points 1000 --normalize
+```
