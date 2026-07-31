@@ -51,7 +51,7 @@ python setup.py
 
 ## Usage
 
-Copy the DFT inputs (see [examples](https://github.com/dmftwdft/DMFTwDFT3/tree/master/examples)) along with an `input.toml` file to a working directory and run,
+Copy the DFT inputs (see [examples](https://github.com/dmftwdft/DMFTwDFT3/tree/master/examples)) along with `input.toml` and `para_com.dat` files to a working directory and run,
 
 ```shell
 DMFT.py dmft --dft <dft_code> --structure-name <name_of_structure> -v
