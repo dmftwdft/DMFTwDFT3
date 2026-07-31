@@ -54,13 +54,13 @@ python setup.py
 Copy the DFT inputs (see [examples](https://github.com/dmftwdft/DMFTwDFT3/tree/master/examples)) along with an `input.toml` file to a working directory and run,
 
 ```shell
-DMFT.py dmft --dft <dft_code> --structure-name <name_of_structure>
+DMFT.py dmft --dft <dft_code> --structure-name <name_of_structure> -v
 ```
 
 E.g., for SrVO$_3$ with Siesta,
 
 ```shell
-DMFT.py dmft --dft siesta --structure-name SrVO3
+DMFT.py dmft --dft siesta --structure-name SrVO3 -v
 ```
 
 Afterwards, for post-processing run,
