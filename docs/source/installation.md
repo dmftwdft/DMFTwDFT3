@@ -165,9 +165,11 @@ For MPI workflows, build Wannier90 against the same MPI implementation used by D
 
 Build the DFT code you intend to use and place its executable in `bin` under the name DMFTwDFT expects,
 
-- VASP: `vasp_std`, and `vaspDMFT` for charge self-consistent calculations (see the library mode section below).
+- VASP: `vasp_std`
 - Siesta: `siesta`
 - Quantum Espresso: `pw.x` and `pw2wannier90.x`
+
+VASP uses the single `vasp_std` executable for both one-shot and charge self-consistent calculations. For charge self-consistent runs, build `vasp_std` with the DMFT source modifications and `libdmft.a` as described in the library mode section below. A VASP executable built this way still runs ordinary one-shot calculations, so no second executable is needed.
 
 Quantum Espresso requires both executables. `pw.x` runs the SCF and NSCF steps, and `pw2wannier90.x` generates the overlap and projection files that Wannier90 consumes. Both ship with a standard Quantum Espresso build, but `pw2wannier90.x` is built only when the Wannier90 interface is enabled, so confirm it is present before running.
 
@@ -184,6 +186,8 @@ For VASP,
 3. Install VASP once before modifying source files.
 4. Copy the modified `mlwf.F` from `sources/CSC-mods` into the VASP source tree and rebuild (without cleaning the build) to create dependencies.
 5. Copy the other required modified files, such as `charge.F`, `electron.F`, `main.F`, and `us.F`, from `sources/CSC-mods`.
-6. Recompile VASP (without cleaning the build), rename the executable to `vaspDMFT`, and copy it to the DMFTwDFT `bin` directory.
+6. Recompile VASP (without cleaning the build) and copy the resulting `vasp_std` executable to the DMFTwDFT `bin` directory.
+
+This replaces the `vasp_std` used for one-shot calculations.
 
 More information on library mode can be found in {ref}`labellibrary`.

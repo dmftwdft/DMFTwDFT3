@@ -554,11 +554,11 @@ if __name__ == "__main__":
 
         if itt < p["Niter"] - 1:
             if args.dft == "vasp":
-                main_out.write("--- Running vaspDMFT " + now() + "---")
+                main_out.write("--- Running VASP " + now() + "---")
                 main_out.write("\n")
                 main_out.flush()
                 print(("\n----- Starting DFT loop : %s -----\n" % (str(itt + 2))))
-                print("\n--- Running vaspDMFT ---\n")
+                print("\n--- Running VASP ---\n")
 
                 if itt == 0:
                     f = open("INCAR", "a")
@@ -568,7 +568,7 @@ if __name__ == "__main__":
                 cmd = (
                     para_com_dft
                     + " "
-                    + bin_exec("vaspDMFT")
+                    + bin_exec("vasp_std")
                     + " > vasp.out 2> vasp.error || { echo 'Parallel run failed!'; exit 1; }"
                 )
                 out, err = subprocess.Popen(

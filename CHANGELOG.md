@@ -4,7 +4,8 @@
 
 - Removed the `path_bin` setting from `input.toml`. The `bin` directory is now derived from the installed package location, so no path configuration is required. Existing `input.toml` files that still set `path_bin` continue to load; the value is ignored.
 - Added `bin_paths.py`, which resolves DMFTwDFT executables, scripts, and data files against the installed `bin` directory.
-- Resolved external executables (`wannier90.x`, `w90chk2chk.x`, `vasp_std`, `vaspDMFT`, `siesta`, `pw.x`, `pw2wannier90.x`) from `bin`, falling back to `PATH` when not present there.
+- Resolved external executables (`wannier90.x`, `w90chk2chk.x`, `vasp_std`, `siesta`, `pw.x`, `pw2wannier90.x`) from `bin`, falling back to `PATH` when not present there.
+- Replaced the separate `vaspDMFT` executable with `vasp_std` for charge self-consistent calculations. A VASP built with the DMFT modifications runs both one-shot and charge self-consistent calculations, so only one executable is needed. Existing charge self-consistent setups must rename `bin/vaspDMFT` to `bin/vasp_std`.
 - Replaced the hardcoded `pw2wannier90.x` invocation with a configurable executable attribute.
 - Fixed `~` and trailing-slash handling for `bin` paths, which previously depended on the exact `path_bin` string.
 - Documented cloning the repository and supplying Wannier90 and DFT executables as installation steps.

@@ -47,7 +47,7 @@ python setup.py
 
 5\. Build Wannier90 and your DFT code(s) separately, then place their executables in the `bin` directory unless they are already globally accessible in your `$PATH`.
 
-`setup.py` builds only the DMFTwDFT components and completes successfully without these, but they are required to run a calculation. DMFTwDFT expects `wannier90.x` and `w90chk2chk.x`, along with `vasp_std` (`vaspDMFT` for charge self-consistent runs), `siesta`, or `pw.x` and `pw2wannier90.x` depending on the DFT code. See the [installation documentation](https://dmftwdft.github.io/DMFTwDFT3/installation.html) for details.
+`setup.py` builds only the DMFTwDFT components and completes successfully without these, but they are required to run a calculation. DMFTwDFT expects `wannier90.x` and `w90chk2chk.x`, along with `vasp_std`, `siesta`, or `pw.x` and `pw2wannier90.x` depending on the DFT code. See the [installation documentation](https://dmftwdft.github.io/DMFTwDFT3/installation.html) for details.
 
 ## Usage
 
