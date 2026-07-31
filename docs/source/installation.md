@@ -171,7 +171,7 @@ Build the DFT code you intend to use and place its executable in `bin` under the
 
 Quantum Espresso requires both executables. `pw.x` runs the SCF and NSCF steps, and `pw2wannier90.x` generates the overlap and projection files that Wannier90 consumes. Both ship with a standard Quantum Espresso build, but `pw2wannier90.x` is built only when the Wannier90 interface is enabled, so confirm it is present before running.
 
-Build the DFT code against the same MPI implementation and architecture as DMFTwDFT and Wannier90. See {ref}`labellibrary` for the additional steps required to produce `vaspDMFT`.
+Build the DFT code against the same MPI implementation and architecture as DMFTwDFT and Wannier90.
 
 ## Library Mode for charge self-consistent DFT+DMFT calculations
 
