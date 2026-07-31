@@ -12,7 +12,7 @@ Included files,
 - `SrVO3.nscf.in`
 - `SrVO3.pw2wannier90.in`
 
-See {doc}`qe` for general Quantum Espresso setup requirements, including pseudopotentials, site-specific QE paths, `path_bin`, MPI launcher, and executable setup.
+See {doc}`qe` for general Quantum Espresso setup requirements, including pseudopotentials, site-specific QE paths, MPI launcher, and executable setup.
 
 Key settings in `input.toml`,
 

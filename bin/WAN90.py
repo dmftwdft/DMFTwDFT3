@@ -7,6 +7,7 @@ from scipy import *
 from scipy import linalg
 from numpy import array, diag, matrix, sum, zeros
 
+from bin_paths import bin_exec
 from mysub import *
 
 
@@ -42,7 +43,7 @@ class WANNIER:
         self.eigvals = array(eigvals).reshape(self.num_kpts, self.num_bands)
         fi_eig.close()
 
-    def load_chk(self, path):
+    def load_chk(self):
         """Load seedname.chk file and store"""
 
         def list_to_complex(a):
@@ -52,7 +53,7 @@ class WANNIER:
             print("formmated chk file exists!")
         elif os.path.exists(self.name + ".chk"):
             print("unformmated chk file exists! we will change it to formmted file.")
-            cmd = path + "w90chk2chk.x -export " + self.name
+            cmd = bin_exec("w90chk2chk.x") + " -export " + self.name
             out, err = subprocess.Popen(
                 cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             ).communicate()
@@ -255,7 +256,7 @@ class WANNIER:
 
 if __name__ == "__main__":
     WAN = WANNIER("wannier90")
-    WAN.load_chk("/home/uthpala/Documents/Research/projects/DMFTwDFT/bin/")
+    WAN.load_chk()
     WAN.load_eig()
     WAN.Check_Unitarity()
     print(WAN.ikpt)

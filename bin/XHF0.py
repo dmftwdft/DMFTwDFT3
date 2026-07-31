@@ -17,6 +17,7 @@ from numpy import arange, array, diag, dot, matrix, ones, shape, sum, transpose,
 
 import Fileio
 import fort_kpt_tools as fkpt
+from bin_paths import bin_exec
 from input_loader import load_input
 import MATRIX_util
 import Struct
@@ -286,7 +287,7 @@ if __name__ == "__main__":
 
     if rank == 0:
         WAN = WAN90.WANNIER("wannier90")
-        WAN.load_chk(p["path_bin"])
+        WAN.load_chk()
         WAN.load_eig()
         WAN.Compute_HamR0()
         ntet, kibz, tetkptr, tet, gptr, tet_idx = Get_Tetra(

@@ -15,13 +15,11 @@ import numpy as np
 # DMFTwDFT imports
 import Struct
 import VASP
+from bin_paths import bin_exec, bin_path
 from input_loader import INPUT_FILE, load_input
 from splash import welcome
 
 # Global helper functions
-BIN_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
 def configure_stdio():
     """Mimic unbuffered Python output for piped runs."""
     for stream in (sys.stdout, sys.stderr):
@@ -48,7 +46,7 @@ def run_command(cmd):
 
 
 def python_command(script_name, *args):
-    parts = [sys.executable, os.path.join(BIN_DIR, script_name)]
+    parts = [sys.executable, bin_path(script_name)]
     parts.extend(str(arg) for arg in args)
     return " ".join(shlex.quote(part) for part in parts)
 
@@ -100,7 +98,7 @@ class DMFTLauncher:
         ####### DFT and wannier90 initialization #######
 
         # wannier90 executable
-        self.wannier90_exec = "wannier90.x"
+        self.wannier90_exec = bin_exec("wannier90.x")
         self.wanbands = 0
         self.updatewanbands = True
 
@@ -110,17 +108,18 @@ class DMFTLauncher:
 
         # VASP calculation
         if self.dft == "vasp":
-            self.vasp_exec = "vasp_std"  # vasp executable
+            self.vasp_exec = bin_exec("vasp_std")  # vasp executable
 
         elif self.dft == "siesta":
-            self.siesta_exec = "siesta"  # siesta executable
+            self.siesta_exec = bin_exec("siesta")  # siesta executable
             self.fdf_to_poscar()
 
         # QE calculation
         elif self.dft == "qe" and self.aiida is False:
             # Nothing to do here for now since we only have
             # QE aiida calculations.
-            self.qe_exec = "pw.x"
+            self.qe_exec = bin_exec("pw.x")
+            self.pw2wannier90_exec = bin_exec("pw2wannier90.x")
             self.qe_to_poscar()
 
         # aiida calculation
@@ -1168,7 +1167,7 @@ class DMFTLauncher:
                 + " && "
                 + self.para_com_dft
                 + " "
-                + "pw2wannier90.x"
+                + self.pw2wannier90_exec
                 + " -in "
                 + finname
                 + " > "

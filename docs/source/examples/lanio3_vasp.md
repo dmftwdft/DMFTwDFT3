@@ -15,7 +15,7 @@ Included files in each subdirectory,
 - `POSCAR`
 - `submit.sh`
 
-See {doc}`vasp` for general VASP setup requirements, including `POTCAR`, `path_bin`, MPI launcher, and executable setup.
+See {doc}`vasp` for general VASP setup requirements, including `POTCAR`, MPI launcher, and executable setup.
 
 The non-charge-self-consistent example has,
 

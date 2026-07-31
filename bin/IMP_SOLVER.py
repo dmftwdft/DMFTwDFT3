@@ -17,6 +17,7 @@ from scipy import *
 from numpy import array, sqrt, zeros
 
 import Fileio
+from bin_paths import bin_exec, bin_path
 from input_loader import load_input
 
 
@@ -166,7 +167,7 @@ def RUN_CTQMC(p, pC, pD, it, itt, para_com, mu, ed, vdc, hf):
             # IMP_SOLVER.Create_Trans(TB.ncor_orb_list[i],p['nspin'],ats[0],cor_orb[i],TB)
             # cmd = 'cp Trans'+str(i+1)+'.dat Trans.dat'
             # print os.popen(cmd).read()
-            atomd_script = os.path.join(p["path_bin"], "atom_d.py")
+            atomd_script = bin_path("atom_d.py")
             cmd = (
                 python_path_command(atomd_script, "atom_d.inp")
                 + " 2> atom_d.error || { echo 'ATOMD run failed!'; exit 1; }"
@@ -214,8 +215,7 @@ def RUN_CTQMC(p, pC, pD, it, itt, para_com, mu, ed, vdc, hf):
             cmd = (
                 para_com
                 + " "
-                + p["path_bin"]
-                + pC["exe"][0]
+                + bin_exec(pC["exe"][0])
                 + " > nohup.out  2> error"
                 + str(i + 1)
                 + ".out || { echo 'Parallel run failed!'; exit 1; }"

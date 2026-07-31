@@ -19,22 +19,35 @@ Read the documentation to learn more: https://dmftwdft.github.io/DMFTwDFT3
 
 ## Quick Install
 
-1\. Create a Python environment using a recommended `environment.yml` file.
+1\. Clone the repository and enter it.
+
+```bash
+git clone https://github.com/dmftwdft/DMFTwDFT3.git
+cd DMFTwDFT3
+```
+
+Or, if you have SSH keys configured with GitHub, `git clone git@github.com:dmftwdft/DMFTwDFT3.git`.
+
+2\. Create a Python environment using a recommended `environment.yml` file.
 
 - Linux: `mamba env create -f environment.yml`
 - macOS: `mamba env create -f environment.macos.yml`
 
-2\. Copy a build template to the repository root as `Makefile.in` and edit values as needed for your system.
+3\. Copy a build template to the repository root as `Makefile.in` and edit values as needed for your system.
 
 - `config/Makefile.in.gnu`: GNU compilers on Linux-style systems.
 - `config/Makefile.in.intel`: Intel oneAPI compilers.
 - `config/Makefile.in.mac`: macOS Apple Silicon/Homebrew OpenMPI build using Homebrew compilers/MPI/OpenBLAS and conda-provided Python/GSL where configured.
 
-3\. Run the setup script,
+4\. Run the setup script,
 
 ```bash
 python setup.py
 ```
+
+5\. Build Wannier90 and your DFT code(s) separately, then place their executables in the `bin` directory unless they are already globally accessible in your `$PATH`.
+
+`setup.py` builds only the DMFTwDFT components and completes successfully without these, but they are required to run a calculation. DMFTwDFT expects `wannier90.x` and `w90chk2chk.x`, along with `vasp_std` (`vaspDMFT` for charge self-consistent runs), `siesta`, or `pw.x` and `pw2wannier90.x` depending on the DFT code. See the [installation documentation](https://dmftwdft.github.io/DMFTwDFT3/installation.html) for details.
 
 ## Usage
 
@@ -81,7 +94,7 @@ If you have used DMFTwDFT in your work, please cite,
 
 > V. Singh, U. Herath, B. Wah, X. Liao, A. H. Romero, and H. Park,<br>
 > "DMFTwDFT: An open-source code combining Dynamical Mean Field Theory with various density functional theory packages,"<br>
-> *Computer Physics Communications* **261**, 107778 (2021).<br>
+> _Computer Physics Communications_ **261**, 107778 (2021).<br>
 > [https://doi.org/10.1016/j.cpc.2020.107778](https://doi.org/10.1016/j.cpc.2020.107778)
 
 BibTex,

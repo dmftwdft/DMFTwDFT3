@@ -25,7 +25,6 @@ sig_tol = 1e-3 # Self-energy convergence tolerance
 dc_type = 1 # Vdc type
 mu_iter = 100 # Steps for the chemical potential convergence
 Nd_qmc = 1 # 0: Use Nd_latt, 1: Use Nd_imp
-path_bin = "~/Dropbox/git/DMFTwDFT/bin/" # Path to bin files
 
 # CTQMC parameters
 [pC]

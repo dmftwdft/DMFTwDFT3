@@ -5,7 +5,6 @@ The [/examples](https://github.com/dmftwdft/DMFTwDFT3/tree/master/examples) dire
 Before running any example,
 
 - Build and install DMFTwDFT as described in {doc}`../installation`.
-- Set `path_bin` in `input.toml` to your local DMFTwDFT `bin` directory.
 - Edit `para_com.dat` and optional `para_com_dft.dat` for your MPI launcher.
 - Provide licensed or site-specific files that are not committed, such as VASP `POTCAR` files or SIESTA, Quantum Espresso pseudopotentials.
 - Use the same MPI stack for Python, DMFTwDFT executables, impurity solvers, Wannier90, and DFT executables.

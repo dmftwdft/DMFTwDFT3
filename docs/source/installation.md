@@ -2,11 +2,28 @@
 
 DMFTwDFT3 is configured for Python 3.11 environments.
 
-The installation has three parts,
+The installation has five parts,
 
-1. Create a Python environment.
-2. Choose and edit the root `Makefile.in` build configuration.
-3. Run `setup.py`, which builds the internal and external components and installs them into `bin`. This step also sets up the required environmental variables.
+1. Clone the repository.
+2. Create a Python environment.
+3. Choose and edit the root `Makefile.in` build configuration.
+4. Run `setup.py`, which builds the internal and external components and installs them into `bin`. This step also sets up the required environmental variables.
+5. Set up the external executables for Wannier90 and the DFT code(s) you intend to use.
+
+## Cloning the Repository
+
+DMFTwDFT is built from source, so start by cloning the repository and working from within it. All subsequent commands assume the repository root as the working directory.
+
+```bash
+git clone https://github.com/dmftwdft/DMFTwDFT3.git
+cd DMFTwDFT3
+```
+
+If you have SSH keys configured with GitHub, you can clone over SSH instead,
+
+```bash
+git clone git@github.com:dmftwdft/DMFTwDFT3.git
+```
 
 ## Python Environment
 
@@ -24,7 +41,7 @@ mamba activate dmft
 
 ## Build Configuration
 
-Copy a template from `config` to the repository root as `Makefile.in`, then edit paths and compiler choices for your machine.
+Copy a template from `config` to the repository root as `Makefile.in`, then edit paths and compiler choices for your machine and run the setup.
 
 ```bash
 cp config/Makefile.in.gnu Makefile.in
@@ -128,15 +145,33 @@ export PYTHONPATH="/path/to/DMFTwDFT3/bin/:$PYTHONPATH"
 
 Restart your shell after setup, or source the file printed by `setup.py`.
 
-## Wannier90
+## External Executables
 
-DMFTwDFT requires `wannier90.x` and `w90chk2chk.x` to be available in `bin` or otherwise resolvable in your environment. You can get them from [Wannier90](http://www.wannier.org/). VASP workflows also require VASP to be compiled with Wannier90 support.
+`setup.py` builds only the DMFTwDFT components listed above. It does **not** build Wannier90 or any DFT code, and the installation will complete successfully without them. Before running a calculation you must build these separately and make their executables available to DMFTwDFT.
+
+Copy or symlink these executables into the DMFTwDFT `bin` directory. DMFTwDFT locates `bin` from the installed package itself, so no path configuration is required in `input.toml`. Each executable is looked up in `bin` first and called by absolute path when found, falling back to the bare name on `PATH` otherwise. This keeps system- or module-provided builds usable without copying them, while making `bin` authoritative when both are present.
+
+### Wannier90
+
+DMFTwDFT requires `wannier90.x` and `w90chk2chk.x`. You can get them from [Wannier90](http://www.wannier.org/). VASP workflows also require VASP to be compiled with Wannier90 support.
 
 ```{note}
 Newer versions of `w90chk2chk.x` may not be compatible with DMFTwDFT, so we recommend using the v2.1.0 release of Wannier90. `wannier90.x` from Wannier90 v3.1.0 is compatible with DMFTwDFT.
 ```
 
 For MPI workflows, build Wannier90 against the same MPI implementation used by DMFTwDFT and the DFT code.
+
+### DFT Codes
+
+Build the DFT code you intend to use and place its executable in `bin` under the name DMFTwDFT expects,
+
+- VASP: `vasp_std`, and `vaspDMFT` for charge self-consistent calculations (see the library mode section below).
+- Siesta: `siesta`
+- Quantum Espresso: `pw.x` and `pw2wannier90.x`
+
+Quantum Espresso requires both executables. `pw.x` runs the SCF and NSCF steps, and `pw2wannier90.x` generates the overlap and projection files that Wannier90 consumes. Both ship with a standard Quantum Espresso build, but `pw2wannier90.x` is built only when the Wannier90 interface is enabled, so confirm it is present before running.
+
+Build the DFT code against the same MPI implementation and architecture as DMFTwDFT and Wannier90. See {ref}`labellibrary` for the additional steps required to produce `vaspDMFT`.
 
 ## Library Mode for charge self-consistent DFT+DMFT calculations
 

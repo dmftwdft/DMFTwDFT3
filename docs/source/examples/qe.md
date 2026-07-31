@@ -6,7 +6,6 @@ General QE setup requirements,
 
 - Provide the Quantum Espresso pseudopotentials referenced by `pseudo_dir` and `ATOMIC_SPECIES`.
 - Edit `pseudo_dir`, `outdir`, and other site-specific QE paths in the `.in` files.
-- Set `path_bin` in `input.toml` to your local DMFTwDFT `bin` directory.
 - Edit `para_com.dat` for your MPI launcher.
 - Ensure QE executables and Wannier90 executables are available in your environment or DMFTwDFT `bin` directory.
 

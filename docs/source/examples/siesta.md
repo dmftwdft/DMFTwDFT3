@@ -6,7 +6,6 @@ General SIESTA setup requirements:
 
 - Include `input.toml`, `para_com.dat`, and optionally `para_com_dft.dat`.
 - Provide the SIESTA input file `<seed>.fdf` and pseudopotential files such as `.psf`.
-- Set `path_bin` in `input.toml` to your local DMFTwDFT `bin` directory.
 - Ensure the SIESTA executable is available in your environment or DMFTwDFT `bin` directory.
 
 The SIESTA `.fdf` file must request the Wannier90 files that DMFTwDFT needs:

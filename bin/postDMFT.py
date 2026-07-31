@@ -18,6 +18,7 @@ from scipy import interpolate
 # DMFTwDFT imports
 import Fileio
 import Struct
+from bin_paths import bin_path
 from input_loader import load_input
 from splash import welcome
 
@@ -29,9 +30,6 @@ matplotlib.use("pdf")
 warnings.filterwarnings("ignore", module=r"matplotlib\..*")
 
 # Global helper functions
-BIN_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
 def configure_stdio():
     """Mimic unbuffered Python output for piped runs."""
     for stream in (sys.stdout, sys.stderr):
@@ -57,7 +55,7 @@ def run_command(cmd):
 
 
 def python_command(script_name, *args):
-    parts = [sys.executable, os.path.join(BIN_DIR, script_name)]
+    parts = [sys.executable, bin_path(script_name)]
     parts.extend(str(arg) for arg in args)
     return " ".join(shlex.quote(part) for part in parts)
 
@@ -112,8 +110,6 @@ class PostProcess:
         else:
             self.para_com = ""
 
-        # dmft_bin
-        self.path_bin = p["path_bin"]
 
     def checksig(self):
         """
@@ -294,9 +290,7 @@ class PostProcess:
         if os.path.exists("maxent_params.dat"):
             shutil.copyfile("maxent_params.dat", "./ac/maxent_params.dat")
         else:
-            src = self.path_bin + os.sep + "maxent_params.dat"
-            src_path = os.path.abspath(os.path.expanduser(os.path.expandvars(src)))
-            shutil.copyfile(src_path, "./ac/maxent_params.dat")
+            shutil.copyfile(bin_path("maxent_params.dat"), "./ac/maxent_params.dat")
 
         # Analytic continuation
         print("Running analytic continuation...")

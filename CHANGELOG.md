@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.4 - 2026-07-31
+
+- Removed the `path_bin` setting from `input.toml`. The `bin` directory is now derived from the installed package location, so no path configuration is required. Existing `input.toml` files that still set `path_bin` continue to load; the value is ignored.
+- Added `bin_paths.py`, which resolves DMFTwDFT executables, scripts, and data files against the installed `bin` directory.
+- Resolved external executables (`wannier90.x`, `w90chk2chk.x`, `vasp_std`, `vaspDMFT`, `siesta`, `pw.x`, `pw2wannier90.x`) from `bin`, falling back to `PATH` when not present there.
+- Replaced the hardcoded `pw2wannier90.x` invocation with a configurable executable attribute.
+- Fixed `~` and trailing-slash handling for `bin` paths, which previously depended on the exact `path_bin` string.
+- Documented cloning the repository and supplying Wannier90 and DFT executables as installation steps.
+
 ## 2.3 - 2026-07-11
 
 - Changed `DMFT.py` and `postDMFT.py` input argument formats to use standard subcommands, short options, and long `--option-name` arguments.

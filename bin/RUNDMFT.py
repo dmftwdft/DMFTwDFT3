@@ -19,6 +19,7 @@ import Fileio
 import IMP_SOLVER
 import Struct
 import VASP
+from bin_paths import bin_exec, bin_path
 from input_loader import load_input
 
 ###########################################################################
@@ -365,7 +366,7 @@ if __name__ == "__main__":
                     )
                     cmd = "cp Trans.dat Trans" + str(i + 1) + ".dat"
                     print(os.popen(cmd).read())
-                    atomd_script = os.path.join(p["path_bin"], "atom_d.py")
+                    atomd_script = bin_path("atom_d.py")
                     cmd = (
                         python_path_command(atomd_script, "atom_d.inp")
                         + " 2> atom_d.error || { echo 'ATOMD run failed!'; exit 1; }"
@@ -401,7 +402,7 @@ if __name__ == "__main__":
                 #     + p["path_bin"]
                 #     + "dmft0.x > ksum_output_dmft0.x 2> ksum_error_dmft0.x"
                 # )
-                xhf0_script = os.path.join(p["path_bin"], "XHF0.py")
+                xhf0_script = bin_path("XHF0.py")
                 cmd = (
                     para_com
                     + " "
@@ -424,8 +425,8 @@ if __name__ == "__main__":
                 cmd = (
                     para_com
                     + " "
-                    + p["path_bin"]
-                    + "dmft.x > ksum_output_dmft.x 2> ksum_error_dmft.x"
+                    + bin_exec("dmft.x")
+                    + " > ksum_output_dmft.x 2> ksum_error_dmft.x"
                 )
                 out, err = subprocess.Popen(
                     cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
@@ -436,8 +437,8 @@ if __name__ == "__main__":
                 cmd = (
                     para_com
                     + " "
-                    + p["path_bin"]
-                    + "dmft.x > ksum_output_dmft.x_HF 2> ksum_error_dmft.x_HF"  # should it be XHF0.py?
+                    + bin_exec("dmft.x")
+                    + " > ksum_output_dmft.x_HF 2> ksum_error_dmft.x_HF"  # should it be XHF0.py?
                 )
                 out, err = subprocess.Popen(
                     cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
@@ -567,8 +568,8 @@ if __name__ == "__main__":
                 cmd = (
                     para_com_dft
                     + " "
-                    + p["path_bin"]
-                    + "vaspDMFT > vasp.out 2> vasp.error || { echo 'Parallel run failed!'; exit 1; }"
+                    + bin_exec("vaspDMFT")
+                    + " > vasp.out 2> vasp.error || { echo 'Parallel run failed!'; exit 1; }"
                 )
                 out, err = subprocess.Popen(
                     cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
@@ -613,7 +614,7 @@ if __name__ == "__main__":
                 main_out.write("\n")
                 main_out.flush()
                 # parallel support is available for wannier90 versions above v1.2
-                cmd = para_com + " " + p["path_bin"] + "wannier90.x wannier90"
+                cmd = para_com + " " + bin_exec("wannier90.x") + " wannier90"
                 # cmd = p["path_bin"] + "wannier90.x wannier90"
                 out, err = subprocess.Popen(
                     cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
@@ -645,7 +646,7 @@ if __name__ == "__main__":
                     shutil.copy(file, ".")
 
                 # Running wannier90 pre-processor to obtain .nnkp file
-                cmd = p["path_bin"] + "wannier90.x" + " -pp" + " " + args.structurename
+                cmd = bin_exec("wannier90.x") + " -pp" + " " + args.structurename
                 out, err = subprocess.Popen(
                     cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 ).communicate()
@@ -655,8 +656,7 @@ if __name__ == "__main__":
                 cmd = (
                     para_com_dft
                     + " "
-                    + p["path_bin"]
-                    + "siesta"
+                    + bin_exec("siesta")
                     + "<"
                     + args.structurename
                     + ".fdf>"
@@ -726,8 +726,7 @@ if __name__ == "__main__":
                 cmd = (
                     para_com
                     + " "
-                    + p["path_bin"]
-                    + "wannier90.x"
+                    + bin_exec("wannier90.x")
                     + " "
                     + args.structurename
                 )

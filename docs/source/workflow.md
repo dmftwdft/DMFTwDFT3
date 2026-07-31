@@ -57,7 +57,6 @@ Most calculation parameters live under the `[p]` section in `input.toml`. Please
 | `mix_sig` | Mixing parameter between previous and current self-energies. |
 | `q` | Dense k-point mesh used for the DMFT Wannier k-sum. This is often chosen larger than the DFT k-mesh because the Wannier interpolation is cheaper than the DFT calculation. |
 | `ewin` | Wannier projection energy window relative to the DFT Fermi energy. |
-| `path_bin` | Path to the DMFTwDFT `bin` directory. |
 | `noms` | Number of Matsubara frequencies for k-sum |
 | `dc_type` | Double-counting correction type. See section *"2.4. Total energy and double counting correction"* in the publication for more details. Default: 1 |
 | `mu_iter` | Steps for the chemical potential convergence |

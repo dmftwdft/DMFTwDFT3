@@ -12,7 +12,7 @@ Included files,
 - `KPOINTS`
 - `POSCAR`
 
-See {doc}`vasp` for general VASP setup requirements, including `POTCAR`, `path_bin`, MPI launcher, and executable setup.
+See {doc}`vasp` for general VASP setup requirements, including `POTCAR`, MPI launcher, and executable setup.
 
 Key settings in `input.toml`:
 
