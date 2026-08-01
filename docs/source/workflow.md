@@ -190,3 +190,68 @@ A(\omega) = \sum_k A(k, \omega)
 ```
 
 and is plot with `postDMFT.py dos`.
+
+### Data Files for Custom Plots
+
+Each post-processing step writes a plain-text data file that can be read directly with `numpy.loadtxt` or equivalent if you want to produce your own figures. In all three, the first column is the real frequency $\omega$ in eV, measured relative to the chemical potential, so $\omega = 0$ is the Fermi level.
+
+#### `ac/Sig.out`
+
+The analytically continued self-energy on the real axis, written by `postDMFT.py ac`.
+
+```text
+# s_oo= [...]
+# Vdc= [...]
+omega   Re Sig_1   Im Sig_1   Re Sig_2   Im Sig_2   ...
+```
+
+After the two header lines, each row is the frequency followed by a real and imaginary pair for every entry in `cor_orb`, in the order listed in `input.toml`. In the SrVO3 example `cor_orb` groups the $d$ orbitals into $e_g$ and $t_{2g}$, so there are two pairs and five columns in total.
+
+The header lines give the high-frequency limit $\Sigma(\infty)$ (`s_oo`) and the double counting (`Vdc`) for the same components. Only the frequency-dependent part is tabulated, so the self-energy entering the Green's function is $\Sigma(\omega) + \Sigma(\infty) - V_{dc}$.
+
+Use this file for scattering rates from $-\mathrm{Im}\,\Sigma(\omega)$, or for mass enhancement from the slope of $\mathrm{Re}\,\Sigma(\omega)$ near $\omega = 0$.
+
+#### `dos/G_loc.out`
+
+The local Green's function on the real axis, written by `postDMFT.py dos`.
+
+```text
+omega   Re G_1   Im G_1   Re G_2   Im G_2   ...
+```
+
+There is one real and imaginary pair per Wannier orbital, in Wannier orbital order, which is the same ordering used by `--wannier-orbitals`. The number of pairs equals the size of the Wannier Hamiltonian. For SrVO3 this is 14 pairs, the five V $d$ orbitals followed by the nine O $p$ orbitals.
+
+The projected density of states for orbital $i$ is,
+
+```{math}
+A_i(\omega) = -\frac{1}{\pi}\,\mathrm{Im}\,G_{ii}(\omega)
+```
+
+in states/eV/cell. Summing the relevant orbital columns gives a projected or total DOS. This is exactly what `postDMFT.py dos` does to produce `dos/DMFT-PDOS.png`.
+
+The number of rows is set by `--omega-points`.
+
+#### `bands/Gk.out`
+
+The k-resolved Green's function, written by `postDMFT.py bands`. The file is arranged in blocks, one per k-point,
+
+```text
+k=   kx   ky   kz
+omega   Re G   Im G
+omega   Re G   Im G
+...
+```
+
+The k-point is in fractional coordinates. The number of frequency rows per block is set by `--omega-points` and the number of blocks by `--band-k-points`. Both values are also recorded on the first two lines of `bands/ksum.input`.
+
+The spectral function plotted as the DMFT band structure is,
+
+```{math}
+A(k, \omega) = -\frac{1}{\pi}\,\mathrm{Im}\,G(k, \omega)
+```
+
+To place the blocks on a band-structure axis, use `bands/klist.dat`, which has one row per k-point containing the cumulative distance along the k-path, the three fractional coordinates, and a label on high-symmetry points. Plotting $A(k, \omega)$ against the first column of `klist.dat` and $\omega$ reproduces the `--plot-plain` figure.
+
+```{note}
+`--plot-partial` runs `dmft_ksum_partial_band` rather than `dmft_ksum_band` and overwrites `Gk.out` with an orbital-resolved variant, where each k-point block is subdivided by Wannier orbital with an additional `orb=` header line. Copy `Gk.out` elsewhere if you need to keep both forms.
+```
