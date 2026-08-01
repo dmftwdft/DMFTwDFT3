@@ -149,7 +149,7 @@ Restart your shell after setup, or source the file printed by `setup.py`.
 
 `setup.py` builds only the DMFTwDFT components listed above. It does **not** build Wannier90 or any DFT code, and the installation will complete successfully without them. Before running a calculation you must build these separately and make their executables available to DMFTwDFT.
 
-Copy or symlink these executables into the DMFTwDFT `bin` directory. DMFTwDFT locates `bin` from the installed package itself, so no path configuration is required in `input.toml`. Each executable is looked up in `bin` first and called by absolute path when found, falling back to the bare name on `PATH` otherwise. This keeps system- or module-provided builds usable without copying them, while making `bin` authoritative when both are present.
+Copy or symlink these executables into the DMFTwDFT `bin` directory. DMFTwDFT locates `bin` from the installed package itself. Each executable is looked up in `bin` first and called by absolute path when found, falling back to the bare name on `PATH` otherwise. This keeps system- or module-provided builds usable without copying them, while making `bin` authoritative when both are present.
 
 ### Wannier90
 
@@ -168,6 +168,8 @@ Build the DFT code you intend to use and place its executable in `bin` under the
 - VASP: `vasp_std`
 - Siesta: `siesta`
 - Quantum Espresso: `pw.x` and `pw2wannier90.x`
+
+If they are not present in `bin`, DMFTwDFT will attempt to call the bare executable name from a global `PATH`.
 
 VASP uses the single `vasp_std` executable for both one-shot and charge self-consistent calculations. For charge self-consistent runs, build `vasp_std` with the DMFT source modifications and `libdmft.a` as described in the library mode section below. A VASP executable built this way still runs ordinary one-shot calculations, so no second executable is needed.
 
