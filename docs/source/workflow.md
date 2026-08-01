@@ -191,6 +191,8 @@ A(\omega) = \sum_k A(k, \omega)
 
 and is plot with `postDMFT.py dos`.
 
+(post-processing-data-files)=
+
 ### Data Files for Custom Plots
 
 Each post-processing step writes a plain-text data file that can be read directly with `numpy.loadtxt` or equivalent if you want to produce your own figures. In all three, the first column is the real frequency $\omega$ in eV, measured relative to the chemical potential, so $\omega = 0$ is the Fermi level.

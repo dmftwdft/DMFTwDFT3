@@ -20,8 +20,8 @@ python /path/to/DMFTwDFT3/utilities/plotDMFT.py -h
 
 ### 1. `plotDMFT.py`
 
-Plots real and imaginary parts of the Green's function `G_loc.out`, averaged self-energy `sig.inp.*`, and optionally analytically continued self-energy (if available) `ac/Sig.out`. Generates figures under `plots`.
-Run from a completed `DMFT` directory.
+Plots real and imaginary parts of the Green's function `G_loc.out.*`, averaged self-energy `sig.inp.*`, and optionally analytically continued self-energy (if available) `ac/Sig.out`. Generates figures under `plots`.
+Run from a completed `DMFT` directory. The Green's function is taken from the last `G_loc.out.*` iteration file without averaging; `--average` applies only to `sig.inp.*`.
 
 The order of the columns are,
 
@@ -30,6 +30,8 @@ The order of the columns are,
 | Matsubara Frequency | | Real part of SE       | Imaginary part SE          | x Repeats for each group
 |---------------------| |-----------------------|----------------------------|   of "cor_orb".
 ```
+
+This layout applies to the imaginary-axis files `G_loc.out.*` and `sig.inp.*`. `ac/Sig.out` uses the same one-pair-per-`cor_orb`-group ordering, but its first column is the real frequency $\omega$ rather than a Matsubara frequency. See {ref}`post-processing-data-files` for the post-processing file formats.
 
 Usage,
 
@@ -55,7 +57,11 @@ plotDMFT.py --average 5 --cor-orb-index 1 2 --cor-orb-labels '$e_g$' '$t_{2g}$'
 ### 2. `plotDMFTDOS.py`
 
 Produces a simple projected DOS plot, `DMFT-PDOS.png`. This script has hard-coded orbital-column assumptions and may need editing for other orbital orderings. Intended for manual investigation of DOS results, when `postDMFT.py dos` is not sufficient.
-Run from a directory containing `G_loc.out` from a DOS run.
+Run from a directory containing `G_loc.out` from a DOS run, that is `dos/G_loc.out`.
+
+```{warning}
+Two different files are named `G_loc.out`. The one in the `DMFT` directory is on the imaginary axis with one column pair per `cor_orb` group, while `dos/G_loc.out` is on the real axis with one column pair per Wannier orbital. This script and {ref}`post-processing-data-files` refer to the latter.
+```
 
 ```bash
 plotDMFTDOS.py
@@ -68,14 +74,13 @@ Run from a completed `DMFT` directory.
 
 The order of the columns in sig.inp are,
 
+```text
+|---------------------| |-----------------------|----------------------------|
+| Matsubara Frequency | | Real part of SE       | Imaginary part SE          | x Repeats for each group
+|---------------------| |-----------------------|----------------------------|   of "cor_orb".
 ```
 
-|---------------------| |-----------------------|----------------------------|
-| Matsubara Frequency | | Real part of SE       | Imaginary part SE          |  x Repeats for each group
-|---------------------| |-----------------------|----------------------------|
-
-of "cor_orb".
-```
+The data rows are preceded by header lines giving `nom`, `ncor_orb`, the temperature, `s_oo-Vdc`, `s_oo`, and `Vdc`.
 
 Usage,
 
