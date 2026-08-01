@@ -128,7 +128,7 @@ If compilation succeeds, the following executables and libraries are copied to `
 
 ## Shell Setup
 
-`setup.py` automatically updates your default shell startup file so the main commands and utilities are available from the shell. It adds `bin` and `utilities` to `PATH`, and adds `bin` to `PYTHONPATH` for DMFTwDFT Python imports,
+`setup.py` automatically updates your default shell startup file so the main commands and utilities are available from the shell. It adds `bin` and `utilities` to `$PATH`, and adds `bin` to `$PYTHONPATH` for DMFTwDFT Python imports,
 
 - `~/.zshrc` when `$SHELL` is zsh
 - `~/.bashrc` otherwise
@@ -169,7 +169,7 @@ Build the DFT code you intend to use and place its executable in `bin` under the
 - Siesta: `siesta`
 - Quantum Espresso: `pw.x` and `pw2wannier90.x`
 
-If they are not present in `bin`, DMFTwDFT will attempt to call the bare executable name from a global `PATH`.
+If they are not present in `bin`, DMFTwDFT will attempt to call the bare executable name from a global `$PATH`.
 
 VASP uses the single `vasp_std` executable for both one-shot and charge self-consistent calculations. For charge self-consistent runs, build `vasp_std` with the DMFT source modifications and `libdmft.a` as described in the library mode section below. A VASP executable built this way still runs ordinary one-shot calculations, so no second executable is needed.
 
