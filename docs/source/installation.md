@@ -149,7 +149,7 @@ Restart your shell after setup, or source the file printed by `setup.py`.
 
 `setup.py` builds only the DMFTwDFT components listed above. It does **not** build Wannier90 or any DFT code, and the installation will complete successfully without them. Before running a calculation you must build these separately and make their executables available to DMFTwDFT.
 
-Copy or symlink these executables into the DMFTwDFT `bin` directory. DMFTwDFT locates `bin` from the installed package itself. Each executable is looked up in `bin` first and called by absolute path when found, falling back to the bare name on `PATH` otherwise. This keeps system- or module-provided builds usable without copying them, while making `bin` authoritative when both are present.
+Copy or symlink these executables into the DMFTwDFT `bin` directory. DMFTwDFT locates `bin` from the installed package itself. Each executable is looked up in `bin` first and called by absolute path when found, falling back to the bare name on `$PATH` otherwise. This keeps system- or module-provided builds usable without copying them, while making `bin` authoritative when both are present.
 
 ### Wannier90
 
