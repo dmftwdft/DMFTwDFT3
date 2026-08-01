@@ -84,7 +84,7 @@ Use the `hf` subcommand instead of `dmft` to run the Hartree-Fock path for the c
 `para_com.dat` contains the MPI command for DMFTwDFT and the impurity solver, for example,
 
 ```text
-mpirun -np 16
+mpirun -n 16
 ```
 
 If the DFT executable needs a different MPI command, place it in `para_com_dft.dat`; otherwise DMFTwDFT reuses `para_com.dat`.
