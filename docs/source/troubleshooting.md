@@ -69,7 +69,29 @@ wannier90.x -pp <seed>
 
 If `<seed>.nnkp` exists and the command returns success, SIESTA should be able to proceed.
 
-## 5. Missing or stale shell setup
+## 5. DFT calculation hangs
+
+If the workflow prints `Running Siesta in ...`, or the VASP or Quantum Espresso equivalent, and never returns, check that the DFT executable is actually running as a single MPI job with all the requested ranks.
+
+When the launcher and the executable come from different MPI implementations, `mpirun -np N` starts N independent single-rank processes instead of one N-rank job. Those processes share one standard input, so only one of them receives the input file and the others stall, leaving the launcher waiting.
+
+The DFT output reports the rank count it actually sees. SIESTA prints,
+
+```text
+* Running in serial mode (only 1 MPI rank).
+```
+
+If that line appears while `para_com.dat` requests more than one rank, or the output contains several `>> Start of run` banners and only one `>> End of run`, the ranks are not being used. Verify the launcher matches the executable as described in sections 1 and 8, then rerun.
+
+To run only the DFT step on a single rank while keeping the DMFT loop parallel, use `para_com_dft.dat`,
+
+```bash
+echo "mpirun -n 1" > para_com_dft.dat
+```
+
+This overrides `para_com.dat` for the DFT executable alone. `dmft.x`, `ctqmc`, and `wannier90.x` continue to use `para_com.dat`.
+
+## 6. Missing or stale shell setup
 
 After setup, `DMFT.py` and `postDMFT.py` should be runnable from calculation directories.
 
@@ -94,7 +116,7 @@ For bash this is usually,
 source ~/.bashrc
 ```
 
-## 6. Generated build files
+## 7. Generated build files
 
 The root `Makefile.in` is the editable build configuration. `setup.py` regenerates internal build files from it, including `sources/make.inc` and staged eDMFT makefiles.
 
@@ -106,7 +128,7 @@ python setup.py
 
 Only edit generated files directly when debugging a build and expecting those edits to be overwritten by the next setup run.
 
-## 7. Checking linked MPI libraries
+## 8. Checking linked MPI libraries
 
 On macOS, use `otool` to inspect dynamic libraries,
 
