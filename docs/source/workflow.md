@@ -62,7 +62,7 @@ Most calculation parameters live under the `[p]` section in `input.toml`. Please
 | `mu_iter` | Steps for the chemical potential convergence |
 | `Nd_qmc` | Default: 0  [0: Use Nd_latt, 1: Use Nd_imp] |
 | `sig_tol` | Tolerance for self-energy convergence to end calculation. Default: 1E$^{-03}$ |
-| `kmesh_tol` | Tolerance for k-mesh convergence. Default: 1E$^{-03}$ |
+| `kmesh_tol` | Tolerance for k-mesh convergence. Default: 1E$^{-07}$ |
 
 The `[pC]` table contains impurity-solver settings and the `[pD]` table contains CIX/atomic solver parameters passed to the impurity setup. For these solver-specific parameters, refer to the CTQMC documentation on the [eDMFT website](http://hauleweb.rutgers.edu/tutorials/Overview.html).
 
