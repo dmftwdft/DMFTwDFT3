@@ -1405,7 +1405,7 @@ class PostProcess:
 
         ##### Reading the EIGENVAL file #####
 
-        fi = open("EIGENVAL", "r")
+        fi = open(args.eigenval, "r")
         for i in range(5):
             skip = fi.readline()
         header = fi.readline()
@@ -1504,7 +1504,7 @@ class PostProcess:
         ##### Reading the KPOINTS file #####
 
         # Getting the high symmetry point names from KPOINTS file
-        f = open("KPOINTS", "r")
+        f = open(args.kpoints, "r")
         KPread = f.read()
         f.close()
 
@@ -1568,7 +1568,7 @@ class PostProcess:
         knames = [str("$" + latx + "$") for latx in knames]
 
         # getting the number of grid points from the KPOINTS file
-        f2 = open("KPOINTS", "r")
+        f2 = open(args.kpoints, "r")
         KPreadlines = f2.readlines()
         f2.close()
         numgridpoints = int(KPreadlines[1].split()[0])
@@ -1775,8 +1775,22 @@ if __name__ == "__main__":
             "--outcar",
             metavar="OUTCAR",
             type=str,
-            help="SCF OUTCAR file for DFT vs. DMFT band structure comparison.",
+            help="SCF OUTCAR file supplying the DFT Fermi energy. Defaults to OUTCAR\nin the current directory.",
             default="OUTCAR",
+        )
+        parser_bands.add_argument(
+            "--eigenval",
+            metavar="EIGENVAL",
+            type=str,
+            help="EIGENVAL file from the line-mode DFT run. Defaults to EIGENVAL\nin the current directory.",
+            default="EIGENVAL",
+        )
+        parser_bands.add_argument(
+            "--kpoints",
+            metavar="KPOINTS",
+            type=str,
+            help="Line-mode KPOINTS file supplying the k-path, used by --auto-k-path\nand --compare-dft. Defaults to KPOINTS in the current directory.",
+            default="KPOINTS",
         )
 
         parser_bands.add_argument(
@@ -1830,6 +1844,26 @@ if __name__ == "__main__":
                 parser_bands.error(
                     "--k-point-list and --k-point-names cannot be combined with "
                     "--auto-k-path or --compare-dft, which read the k-path from KPOINTS."
+                )
+
+            # EIGENVAL and OUTCAR are not opened until the bands have already
+            # been computed, so check them up front rather than losing the run.
+            missing = []
+            if args.autokp or args.compare:
+                if not os.path.exists(args.kpoints):
+                    missing.append(("--kpoints", args.kpoints))
+            if args.compare:
+                for flag, path in [
+                    ("--eigenval", args.eigenval),
+                    ("--outcar", args.outcar),
+                ]:
+                    if not os.path.exists(path):
+                        missing.append((flag, path))
+            if missing:
+                parser_bands.error(
+                    "file not found: %s. Copy the DFT band-structure output into "
+                    "this directory or pass a path with the flag shown."
+                    % ", ".join("%s '%s'" % (f, p) for f, p in missing)
                 )
 
             if args.kplist is None:

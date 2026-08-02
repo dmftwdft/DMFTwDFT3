@@ -214,17 +214,19 @@ Reciprocal
 
 `--compare-dft` overlays the DFT bands on the DMFT spectral function. It works with `--plot-plain`, `--plot-partial`, and the spin-polarized options.
 
-The DMFT run does not produce the files this needs. They come from a separate VASP band-structure calculation, and three of them must be present in the `DMFT` directory,
+The DMFT run does not produce the files this needs. They come from a separate VASP band-structure calculation,
 
-| File | Purpose | Renameable |
+| File | Purpose | Flag |
 | --- | --- | --- |
-| `KPOINTS` | line-mode path, supplies the k-path and tick labels | no |
-| `EIGENVAL` | DFT eigenvalues along that path | no |
-| `OUTCAR` | Fermi energy used to shift the DFT bands | yes, via `--outcar` |
+| `KPOINTS` | line-mode path, supplies the k-path and tick labels | `--kpoints` |
+| `EIGENVAL` | DFT eigenvalues along that path | `--eigenval` |
+| `OUTCAR` | Fermi energy used to shift the DFT bands | `--outcar` |
 
-`--compare-dft` implies `--auto-k-path`. The path is always taken from `KPOINTS`, so that the DMFT and DFT bands share an axis. Combining it with `--k-point-list` or `--k-point-names` is rejected rather than silently ignored.
+Each flag defaults to that file name in the current directory, so copying all three into `DMFT` works. Passing paths instead avoids the copy and, more usefully, avoids a name collision: charge self-consistent runs leave their own `OUTCAR` in the `DMFT` directory, and the DFT band run's `OUTCAR` must not overwrite it.
 
-Use `--outcar` when the `DMFT` directory already contains an `OUTCAR`, which is the case for charge self-consistent runs. Copy the band-run file under a distinct name and point the flag at it.
+If any of the three is missing, the run stops immediately. This matters because `EIGENVAL` and `OUTCAR` are not read until after the spectral function has been computed, so an unchecked typo would waste the whole calculation.
+
+`--compare-dft` implies `--auto-k-path`. The path is always taken from the `KPOINTS` file, so that the DMFT and DFT bands share an axis. Combining it with `--k-point-list` or `--k-point-names` is rejected rather than silently ignored.
 
 ```{important}
 Point `--outcar` at the **self-consistent** `OUTCAR`, meaning the one from the run that produced the `CHGCAR` reused by the `ICHARG=11` calculation. That run sets the absolute energy zero of the eigenvalues in `EIGENVAL`, so only its Fermi energy puts the DFT bands on the same scale as the DMFT spectral function.
@@ -248,11 +250,10 @@ sed -i -e 's/.*LWANNIER.*/LWANNIER=.FALSE./g' INCAR
 mpirun -n $SLURM_NTASKS vasp_std > vasp.log 2> vasp.error
 cd ..
 
-# post-processing
+# post-processing, reading the DFT files in place
 cd DMFT
-cp ../KPOINTS.nscf KPOINTS
-cp ../DFT/EIGENVAL ../DFT/OUTCAR.scf .
-postDMFT.py bands --plot-plain --compare-dft --outcar OUTCAR.scf \
+postDMFT.py bands --plot-plain --compare-dft \
+    --kpoints ../DFT/KPOINTS --eigenval ../DFT/EIGENVAL --outcar ../DFT/OUTCAR.scf \
     --omega-points 1000 --band-k-points 1000 --normalize
 ```
 
