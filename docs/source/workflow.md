@@ -184,10 +184,11 @@ postDMFT.py bands --plot-plain \
 
 Repeat `--k-point-list` once per point, with three fractional coordinates each. `--k-point-names` must have exactly one entry per point, otherwise the run stops with an error rather than producing a mislabelled axis.
 
-Alternatively, `--auto-k-path` reads the path from a VASP line-mode `KPOINTS` file in the `DMFT` directory,
+Alternatively, `--auto-k-path` reads the path from a VASP line-mode `KPOINTS` file, taken from the current directory unless `--kpoints` gives a path to one,
 
 ```bash
 postDMFT.py bands --plot-plain --auto-k-path
+postDMFT.py bands --plot-plain --auto-k-path --kpoints ../DFT/KPOINTS
 ```
 
 The `KPOINTS` file must be in line mode, with the number of points per segment on the second line, the `Reciprocal` keyword, and a `!` label on every k-point line,
@@ -205,6 +206,8 @@ Reciprocal
 ```
 
 `GAMMA`, `G`, `GM`, and a literal `Γ` are all rendered as $\Gamma$. Other labels are passed through as LaTeX, so a subscripted point is written `X_1`. Cartesian line mode is not supported. Repeating a segment endpoint with a different label produces a discontinuous path, which is drawn with a break in the axis.
+
+The file is read only as a text description of the k-path, and no part of it is specific to VASP. SIESTA and Quantum Espresso users can therefore write one by hand in the format above, describing the same path as their DFT band calculation, and use `--auto-k-path` without running VASP.
 
 ```{note}
 `--band-k-points` is a starting value. If the requested number of points cannot be distributed over the path, it is incremented until it can, and the value actually used is printed and recorded in `bands/ksum.input`. This determines the number of blocks in `bands/Gk.out`.
@@ -260,7 +263,7 @@ postDMFT.py bands --plot-plain --compare-dft \
 Turning off `LWANNIER` for the band run matters. The Wannier projection is only meaningful on a uniform k-mesh, and the line-mode run would otherwise overwrite the Wannier files the DMFT run depends on.
 
 ```{note}
-This comparison reads VASP-format files only. For SIESTA and Quantum Espresso workflows, there is no built-in equivalent, so either convert your DFT band output to `EIGENVAL` format or plot the DFT bands separately from `bands/Gk.out` as described in {ref}`post-processing-data-files`.
+`--compare-dft` requires VASP-format `EIGENVAL` and `OUTCAR` files and is intended for VASP workflows. SIESTA and Quantum Espresso users can still use `--auto-k-path`, which needs only the `KPOINTS` file, and can plot their DFT bands independently against the spectral function read from `bands/Gk.out`, as described in {ref}`post-processing-data-files`.
 ```
 
 ### Projected Bands
