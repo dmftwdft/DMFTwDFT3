@@ -762,8 +762,16 @@ class PostProcess:
 
         # Iterating args.kpband to get correct k-list.
         indexerror = True
+        kpband_max = args.kpband + 10 * len(args.kplist)
 
         while indexerror:
+            if args.kpband > kpband_max:
+                print(
+                    "Could not lay out a k-path with up to %d k-points.\n"
+                    "Check that --k-point-list has no repeated adjacent points.\n"
+                    % kpband_max
+                )
+                sys.exit(1)
             try:
                 # generating k-path
                 klist, dist_K, dist_SK = self.Create_kpath(args.kplist, args.kpband)
@@ -1500,8 +1508,28 @@ class PostProcess:
         KPread = f.read()
         f.close()
 
-        KPmatrix = re.findall("reciprocal[\s\S]*", KPread)
-        tick_labels = np.array(re.findall("!\s*(.*)", KPmatrix[0]))
+        # VASP writes "Reciprocal", pymatgen writes "reciprocal", so match
+        # either. Cartesian line-mode files are not supported.
+        KPmatrix = re.findall("reciprocal[\s\S]*", KPread, re.IGNORECASE)
+        if not KPmatrix:
+            print(
+                "Could not find a 'Reciprocal' section in KPOINTS.\n"
+                "--auto-k-path and --compare-dft require a line-mode KPOINTS file\n"
+                "in reciprocal coordinates, with a ! label on every k-point line.\n"
+            )
+            sys.exit(1)
+
+        tick_labels = np.array(
+            [lbl.strip() for lbl in re.findall("!\s*(.*)", KPmatrix[0])]
+        )
+        if len(tick_labels) < 2:
+            print(
+                "KPOINTS has %d labelled k-points. Every k-point line in a\n"
+                "line-mode KPOINTS file must carry a ! label, for example\n"
+                "  0.0 0.0 0.0 ! GAMMA\n" % len(tick_labels)
+            )
+            sys.exit(1)
+
         knames = []
         knames = [tick_labels[0]]
 
@@ -1528,12 +1556,15 @@ class PostProcess:
 
         # End of discontinuity check
 
-        # Improve latex rendering
+        # Improve latex rendering. Accept the spellings VASP tools commonly
+        # write, including a literal unicode gamma, which mathtext cannot set.
+        gamma_aliases = ("GAMMA", "G", "GM", "Γ", "γ")
         for i in range(len(knames)):
-            if knames[i] == "GAMMA":
-                knames[i] = "\Gamma"
-            else:
-                pass
+            parts = knames[i].split("|")
+            for j, part in enumerate(parts):
+                if part.strip().upper() in gamma_aliases:
+                    parts[j] = "\Gamma"
+            knames[i] = "|".join(parts)
         knames = [str("$" + latx + "$") for latx in knames]
 
         # getting the number of grid points from the KPOINTS file
@@ -1557,6 +1588,14 @@ class PostProcess:
             print(("discont. list  : %s " % str(discontinuities)))
 
         return knames, kticks, discontinuities, kplist
+
+
+# Default k-path (simple cubic). Kept out of add_argument() because
+# --k-point-list uses action="append", which extends its default instead of
+# replacing it. Both defaults are applied after parsing so that supplying one
+# without the other is caught by the length check.
+DEFAULT_KNAMES = ["$\Gamma$", "$X$", "$M$", "$\Gamma$", "$R$"]
+DEFAULT_KPLIST = [[0, 0, 0], [0.5, 0, 0], [0.5, 0.5, 0], [0, 0, 0], [0.5, 0.5, 0.5]]
 
 
 if __name__ == "__main__":
@@ -1670,20 +1709,21 @@ if __name__ == "__main__":
             "--k-point-names",
             dest="knames",
             metavar="NAME",
-            default=["$\Gamma$", "$X$", "$M$", "$\Gamma$", "$R$"],
+            default=None,
             type=str,
             nargs="+",
-            help="Names of the k-points",
+            help="Names of the k-points. One per --k-point-list entry.\nDefault: %s"
+            % " ".join(DEFAULT_KNAMES),
         )
         parser_bands.add_argument(
             "--k-point-list",
             dest="kplist",
             metavar="COORD",
-            default=[[0, 0, 0], [0.5, 0, 0], [0.5, 0.5, 0], [0, 0, 0], [0.5, 0.5, 0.5]],
+            default=None,
             type=float,
-            nargs="+",
+            nargs=3,
             action="append",
-            help="List of k-points as an array",
+            help="High symmetry point in fractional coordinates.\nRepeat the flag once per point, e.g.\n  --k-point-list 0 0 0 --k-point-list 0.5 0 0",
         )
         parser_bands.add_argument(
             "--auto-k-path",
@@ -1781,6 +1821,29 @@ if __name__ == "__main__":
             print("\n--- DMFT DOS Plotter ---\n")
         elif args.command == "bands":
             print("\n--- DMFT Bandstructure Plotter ---\n")
+
+            # --auto-k-path and --compare-dft take the path from KPOINTS, so an
+            # explicitly supplied path would be silently discarded.
+            if (args.autokp or args.compare) and (
+                args.kplist is not None or args.knames is not None
+            ):
+                parser_bands.error(
+                    "--k-point-list and --k-point-names cannot be combined with "
+                    "--auto-k-path or --compare-dft, which read the k-path from KPOINTS."
+                )
+
+            if args.kplist is None:
+                args.kplist = DEFAULT_KPLIST
+            if args.knames is None:
+                args.knames = DEFAULT_KNAMES
+
+            if len(args.knames) != len(args.kplist):
+                parser_bands.error(
+                    "--k-point-names has %d entries but --k-point-list has %d. "
+                    "They must match, one name per high symmetry point."
+                    % (len(args.knames), len(args.kplist))
+                )
+
         getattr(PostProcess(), args.func)(args)
 
     else:

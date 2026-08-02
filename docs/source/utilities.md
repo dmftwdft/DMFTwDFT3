@@ -33,6 +33,8 @@ The order of the columns are,
 
 This layout applies to the imaginary-axis files `G_loc.out.*` and `sig.inp.*`. `ac/Sig.out` uses the same one-pair-per-`cor_orb`-group ordering, but its first column is the real frequency $\omega$ rather than a Matsubara frequency. See {ref}`post-processing-data-files` for the post-processing file formats.
 
+Note that `--cor-orb-index` indexes `cor_orb` groups, not Wannier orbitals. It is unrelated to the `--wannier-orbitals` indexing used by `postDMFT.py bands`, which is described in {ref}`wannier-orbital-order`.
+
 Usage,
 
 ```text
@@ -61,6 +63,8 @@ Run from a directory containing `G_loc.out` from a DOS run, that is `dos/G_loc.o
 
 ```{warning}
 Two different files are named `G_loc.out`. The one in the `DMFT` directory is on the imaginary axis with one column pair per `cor_orb` group, while `dos/G_loc.out` is on the real axis with one column pair per Wannier orbital. This script and {ref}`post-processing-data-files` refer to the latter.
+
+The hard-coded columns are 2 and 8, the imaginary parts of Wannier orbitals 1 and 4, which are the $e_g$ pair for a single correlated $d$ atom. For any other orbital grouping, edit the script or use `postDMFT.py dos`. See {ref}`wannier-orbital-order`.
 ```
 
 ```bash

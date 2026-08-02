@@ -162,12 +162,196 @@ Band-structure calculations write outputs under `bands`,
 
 ```bash
 postDMFT.py bands --plot-plain
-postDMFT.py bands --plot-partial --wannier-orbitals 4 5 6
+postDMFT.py bands --plot-plain --auto-k-path
+postDMFT.py bands --plot-partial --wannier-orbitals 2 3 5
 postDMFT.py bands --spin-polarized
 postDMFT.py bands --compare-dft
 ```
 
-For projected bands, `--wannier-orbitals` uses Wannier orbital indices. The ordering follows the atom order in the structure and the Wannier orbital order.
+### Choosing the k-path
+
+The band-structure k-path can be set in three ways.
+
+By default, `postDMFT.py bands` uses a simple-cubic path, $\Gamma$-$X$-$M$-$\Gamma$-$R$, which is appropriate for the SrVO$_3$ examples and little else.
+
+For any other structure, give the path explicitly. `--k-point-list` takes one high-symmetry point per flag occurrence, and `--k-point-names` takes the matching labels in the same order,
+
+```bash
+postDMFT.py bands --plot-plain \
+    --k-point-list 0 0 0 --k-point-list 0.5 0 0.5 --k-point-list 0.375 0.375 0.75 \
+    --k-point-names '$\Gamma$' '$X$' '$K$'
+```
+
+Repeat `--k-point-list` once per point, with three fractional coordinates each. `--k-point-names` must have exactly one entry per point, otherwise the run stops with an error rather than producing a mislabelled axis.
+
+Alternatively, `--auto-k-path` reads the path from a VASP line-mode `KPOINTS` file in the `DMFT` directory,
+
+```bash
+postDMFT.py bands --plot-plain --auto-k-path
+```
+
+The `KPOINTS` file must be in line mode, with the number of points per segment on the second line, the `Reciprocal` keyword, and a `!` label on every k-point line,
+
+```text
+k-points along high symmetry lines
+40
+Line-mode
+Reciprocal
+   0.0  0.0  0.0 ! GAMMA
+   0.5  0.0  0.0 ! X
+
+   0.5  0.0  0.0 ! X
+   0.5  0.5  0.0 ! M
+```
+
+`GAMMA`, `G`, `GM`, and a literal `Γ` are all rendered as $\Gamma$. Other labels are passed through as LaTeX, so a subscripted point is written `X_1`. Cartesian line mode is not supported. Repeating a segment endpoint with a different label produces a discontinuous path, which is drawn with a break in the axis.
+
+```{note}
+`--band-k-points` is a starting value. If the requested number of points cannot be distributed over the path, it is incremented until it can, and the value actually used is printed and recorded in `bands/ksum.input`. This determines the number of blocks in `bands/Gk.out`.
+```
+
+### Comparing with a DFT Band Structure
+
+`--compare-dft` overlays the DFT bands on the DMFT spectral function. It works with `--plot-plain`, `--plot-partial`, and the spin-polarized options.
+
+The DMFT run does not produce the files this needs. They come from a separate VASP band-structure calculation, and three of them must be present in the `DMFT` directory,
+
+| File | Purpose | Renameable |
+| --- | --- | --- |
+| `KPOINTS` | line-mode path, supplies the k-path and tick labels | no |
+| `EIGENVAL` | DFT eigenvalues along that path | no |
+| `OUTCAR` | Fermi energy used to shift the DFT bands | yes, via `--outcar` |
+
+`--compare-dft` implies `--auto-k-path`. The path is always taken from `KPOINTS`, so that the DMFT and DFT bands share an axis. Combining it with `--k-point-list` or `--k-point-names` is rejected rather than silently ignored.
+
+Use `--outcar` when the `DMFT` directory already contains an `OUTCAR`, which is the case for charge self-consistent runs. Copy the band-run file under a distinct name and point the flag at it.
+
+```{important}
+Point `--outcar` at the **self-consistent** `OUTCAR`, meaning the one from the run that produced the `CHGCAR` reused by the `ICHARG=11` calculation. That run sets the absolute energy zero of the eigenvalues in `EIGENVAL`, so only its Fermi energy puts the DFT bands on the same scale as the DMFT spectral function.
+
+The `OUTCAR` written by the line-mode run itself reports a Fermi energy too, but it is computed from a one-dimensional path through the Brillouin zone rather than a proper sampling of it, and is not meaningful. Using it shifts the DFT bands rigidly, typically by several tenths of an eV.
+
+The check is easy to make by eye. Uncorrelated bands well away from the Fermi level, the O $p$ manifold in SrVO$_3$, must lie on top of the corresponding spectral weight. If every DFT band is displaced by the same amount, the Fermi energy is wrong.
+```
+
+A typical sequence is a self-consistent run, a non-self-consistent run along the k-path with `ICHARG=11` reusing the converged `CHGCAR`, and then post-processing,
+
+```bash
+# DFT band structure, in a separate directory.
+# CHGCAR and OUTCAR come from the self-consistent run, so they share an energy zero.
+mkdir -p DFT && cp CHGCAR INCAR POSCAR POTCAR DFT/
+cp OUTCAR DFT/OUTCAR.scf
+cd DFT
+cp ../KPOINTS.nscf KPOINTS
+sed -i -e 's/.*ICHARG.*/ICHARG=11/g' INCAR
+sed -i -e 's/.*LWANNIER.*/LWANNIER=.FALSE./g' INCAR
+mpirun -n $SLURM_NTASKS vasp_std > vasp.log 2> vasp.error
+cd ..
+
+# post-processing
+cd DMFT
+cp ../KPOINTS.nscf KPOINTS
+cp ../DFT/EIGENVAL ../DFT/OUTCAR.scf .
+postDMFT.py bands --plot-plain --compare-dft --outcar OUTCAR.scf \
+    --omega-points 1000 --band-k-points 1000 --normalize
+```
+
+Turning off `LWANNIER` for the band run matters. The Wannier projection is only meaningful on a uniform k-mesh, and the line-mode run would otherwise overwrite the Wannier files the DMFT run depends on.
+
+```{note}
+This comparison reads VASP-format files only. For SIESTA and Quantum Espresso workflows, there is no built-in equivalent, so either convert your DFT band output to `EIGENVAL` format or plot the DFT bands separately from `bands/Gk.out` as described in {ref}`post-processing-data-files`.
+```
+
+### Projected Bands
+
+`--plot-partial` projects the spectral function onto selected Wannier orbitals,
+
+```bash
+postDMFT.py bands --plot-partial --wannier-orbitals 2 3 5
+```
+
+`--wannier-orbitals` takes 1-based indices into the Wannier orbital ordering described below.
+
+(wannier-orbital-order)=
+
+### Wannier Orbital Order
+
+One ordering is used throughout the post-processing outputs. It is the basis order of the Wannier Hamiltonian, and it is fixed by the projection block that `DMFT.py` writes into `wannier90.win`,
+
+```text
+begin projections
+V:d
+O:p
+end projections
+```
+
+The order is built up in three nested levels,
+
+1. the entries of `atomnames` in `input.toml`, in the order listed there,
+2. within a species, its atoms in the order they appear in the structure file,
+3. within an atom, the $2l+1$ orbitals in Wannier90's $m_r$ order.
+
+The projection block names only the species and the angular momentum, so the third level has to be read off Wannier90's convention,
+
+| $l$ | $m_r$ order |
+| --- | --- |
+| `s` | $s$ |
+| `p` | $p_z$, $p_x$, $p_y$ |
+| `d` | $d_{z^2}$, $d_{xz}$, $d_{yz}$, $d_{x^2-y^2}$, $d_{xy}$ |
+| `f` | $f_{z^3}$, $f_{xz^2}$, $f_{yz^2}$, $f_{z(x^2-y^2)}$, $f_{xyz}$, $f_{x(x^2-3y^2)}$, $f_{y(3x^2-y^2)}$ |
+
+For SrVO$_3$, with `atomnames = ["V", "O"]` and `orbs = ["d", "p"]`, this gives 14 Wannier functions,
+
+| Index | Orbital |
+| --- | --- |
+| 1-5 | V $d_{z^2}$, $d_{xz}$, $d_{yz}$, $d_{x^2-y^2}$, $d_{xy}$ |
+| 6-8 | O(1) $p_z$, $p_x$, $p_y$ |
+| 9-11 | O(2) $p_z$, $p_x$, $p_y$ |
+| 12-14 | O(3) $p_z$, $p_x$, $p_y$ |
+
+so the $t_{2g}$ manifold is `--wannier-orbitals 2 3 5` and the $e_g$ manifold is `--wannier-orbitals 1 4`.
+
+#### Checking the order for your system
+
+Do not take the convention on trust for a new structure. The `Final State` block of `wannier90.wout` lists the Wannier functions in exactly this order, with their centres and spreads,
+
+```text
+ Final State
+  WF centre and spread    1  (  1.923260,  1.923260,  1.923260 )     0.58374109
+  WF centre and spread    2  (  1.923260,  1.923260,  1.923260 )     0.65265213
+  WF centre and spread    3  (  1.923260,  1.923260,  1.923260 )     0.65265215
+  WF centre and spread    4  (  1.923260,  1.923260,  1.923260 )     0.58374188
+  WF centre and spread    5  (  1.923260,  1.923260,  1.923260 )     0.65265210
+  WF centre and spread    6  (  1.923260,  1.923260,  0.000000 )     0.69447337
+  ...
+```
+
+The centres identify which atom each index belongs to, and the spreads identify the symmetry multiplets within an atom. Here functions 1-5 sit on the V site, and their spreads fall into a twofold group, 1 and 4 at 0.5837, and a threefold group, 2, 3 and 5 at 0.6527. That is the $e_g$ and $t_{2g}$ splitting, confirming the table above from the calculation itself rather than from the convention.
+
+#### Which files use this ordering
+
+```{list-table}
+:header-rows: 1
+
+* - Uses Wannier orbital order
+  - Uses `cor_orb` group order
+* - Column pairs in `dos/G_loc.out`
+  - Column pairs in `ac/Sig.out`
+* - `orb=` blocks in `bands/Gk.out` from `--plot-partial`
+  - Column pairs in `sig.inp` and `sig.inp.*`
+* - `--wannier-orbitals`
+  - Column pairs in `G_loc.out` and `G_loc.out.*` in the `DMFT` directory
+* - `plotDMFTDOS.py`
+  - `--cor-orb-index` in `plotDMFT.py` and `Z.py`
+```
+
+The two orderings are unrelated and have different lengths. For SrVO$_3$ the Wannier ordering has 14 entries, while `cor_orb` has two, the $e_g$ and $t_{2g}$ groups. Mixing them up is the most common source of wrong custom plots, so check the column count of a file before indexing into it.
+
+The intermediate files `bands/SigMoo_real.out` and `bands/SigMdc.out` use a third layout, the Wannier ordering restricted to the correlated orbitals, which for SrVO$_3$ gives five entries rather than 14 or 2. They are inputs to `dmft_ksum_band` and are not meant for plotting.
+
+For SrVO$_3$, orbitals 1-5 are the V $d$ states and 6-14 the O $p$ states. Wannier90 orders $d$ orbitals as $d_{z^2}$, $d_{xz}$, $d_{yz}$, $d_{x^2-y^2}$, $d_{xy}$, so `--wannier-orbitals 2 3 5` selects the $t_{2g}$ manifold and `--wannier-orbitals 1 4` the $e_g$ manifold. The latter is the default.
+
+`--normalize` rescales the spectral intensity, with `--value-limits` setting the range. This is usually necessary when comparing plots across systems or against DFT bands.
 
 The DMFT band structure is represented by the k-resolved spectral function,
 
@@ -207,7 +391,7 @@ The analytically continued self-energy on the real axis, written by `postDMFT.py
 omega   Re Sig_1   Im Sig_1   Re Sig_2   Im Sig_2   ...
 ```
 
-After the two header lines, each row is the frequency followed by a real and imaginary pair for every entry in `cor_orb`, in the order listed in `input.toml`. In the SrVO3 example `cor_orb` groups the $d$ orbitals into $e_g$ and $t_{2g}$, so there are two pairs and five columns in total.
+After the two header lines, each row is the frequency followed by a real and imaginary pair for every entry in `cor_orb`, in the order listed in `input.toml`. In the SrVO3 example `cor_orb` groups the $d$ orbitals into $e_g$ and $t_{2g}$, so there are two pairs and five columns in total. This is the `cor_orb` group ordering, not the Wannier orbital ordering; see {ref}`wannier-orbital-order`.
 
 The header lines give the high-frequency limit $\Sigma(\infty)$ (`s_oo`) and the double counting (`Vdc`) for the same components. Only the frequency-dependent part is tabulated, so the self-energy entering the Green's function is $\Sigma(\omega) + \Sigma(\infty) - V_{dc}$.
 
@@ -221,7 +405,7 @@ The local Green's function on the real axis, written by `postDMFT.py dos`.
 omega   Re G_1   Im G_1   Re G_2   Im G_2   ...
 ```
 
-There is one real and imaginary pair per Wannier orbital, in Wannier orbital order, which is the same ordering used by `--wannier-orbitals`. The number of pairs equals the size of the Wannier Hamiltonian. For SrVO3 this is 14 pairs, the five V $d$ orbitals followed by the nine O $p$ orbitals.
+There is one real and imaginary pair per Wannier orbital, in the ordering given in {ref}`wannier-orbital-order`, which is the same ordering used by `--wannier-orbitals`. The number of pairs equals the size of the Wannier Hamiltonian. For SrVO3 this is 14 pairs, the five V $d$ orbitals followed by the nine O $p$ orbitals.
 
 The projected density of states for orbital $i$ is,
 
@@ -246,14 +430,20 @@ omega   Re G   Im G
 
 The k-point is in fractional coordinates. The number of frequency rows per block is set by `--omega-points` and the number of blocks by `--band-k-points`. Both values are also recorded on the first two lines of `bands/ksum.input`.
 
+There are three columns whatever the size of the system, because $G$ here is the trace over the Wannier basis rather than an orbital-resolved quantity. The `orb=` blocks written by `--plot-partial` are the diagonal elements that sum to it.
+
 The spectral function plotted as the DMFT band structure is,
 
 ```{math}
 A(k, \omega) = -\frac{1}{\pi}\,\mathrm{Im}\,G(k, \omega)
 ```
 
+```{warning}
+$G(k, \omega)$ is evaluated with a fixed numerical broadening of $\eta = 0.03$ eV, hard-coded in `dmft_ksum_band` and not exposed as an option. Peak widths measured from `Gk.out` therefore include this broadening and are not scattering rates. Take those from $-\mathrm{Im}\,\Sigma(\omega)$ in `ac/Sig.out` instead.
+```
+
 To place the blocks on a band-structure axis, use `bands/klist.dat`, which has one row per k-point containing the cumulative distance along the k-path, the three fractional coordinates, and a label on high-symmetry points. Plotting $A(k, \omega)$ against the first column of `klist.dat` and $\omega$ reproduces the `--plot-plain` figure.
 
 ```{note}
-`--plot-partial` runs `dmft_ksum_partial_band` rather than `dmft_ksum_band` and overwrites `Gk.out` with an orbital-resolved variant, where each k-point block is subdivided by Wannier orbital with an additional `orb=` header line. Copy `Gk.out` elsewhere if you need to keep both forms.
+`--plot-partial` runs `dmft_ksum_partial_band` rather than `dmft_ksum_band` and overwrites `Gk.out` with an orbital-resolved variant, where each k-point block is subdivided by Wannier orbital with an additional `orb=` header line. The `orb=` blocks follow {ref}`wannier-orbital-order`, so every k-point block holds one sub-block per Wannier orbital regardless of which ones `--wannier-orbitals` selected. Copy `Gk.out` elsewhere if you need to keep both forms.
 ```
