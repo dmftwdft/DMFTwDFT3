@@ -79,7 +79,7 @@ DMFT.py dmft --dft qe --structure-name SrVO3
 DMFT.py dmft --dft qe --aiida --verbose
 ```
 
-Use the `hf` subcommand instead of `dmft` to run the Hartree-Fock path for the correlated orbitals. Use `--restart` to restart from the beginning. For SIESTA and QE, `--structure-name` should match the seed name used by files such as `<seed>.fdf`, `<seed>.scf.in`, and Wannier90 outputs.
+Use the `hf` subcommand instead of `dmft` to run the Hartree-Fock path for the correlated orbitals. Use `--restart` to restart from the beginning. This discards `sig.inp` and generates a fresh non-interacting self-energy with `sigzero.py`, and clears the accumulated `iterations.log`. Without it, `DMFT.py` resumes an existing calculation and the converged `sig.inp` from the previous run is carried forward as the starting self-energy. For SIESTA and QE, `--structure-name` should match the seed name used by files such as `<seed>.fdf`, `<seed>.scf.in`, and Wannier90 outputs.
 
 `para_com.dat` contains the MPI command for DMFTwDFT and the impurity solver, for example,
 
@@ -107,6 +107,7 @@ The main runtime files are written inside the generated `DMFT` or `HF` directory
 | `G_loc.out` | Local Green's function from the lattice k-sum. |
 | `Delta.out` | Hybridization function. |
 | `sig.inp` | Current self-energy on the imaginary axis. Archived as `sig.inp.<outer>.<dmft>` for each iteration. |
+| `iterations.log` | Iteration history preserved across resumed calculations. One row per launch of `DMFT.py`, recording the last DFT+DMFT iteration and DMFT iteration that launch reached. See {ref}`Monitoring Progress <monitoring-progress>`. |
 
 (monitoring-progress)=
 
@@ -139,6 +140,15 @@ The columns are (from left to right),
 | `charge_diff` | Charge-density difference between two consecutive outer steps. For non-charge-self-consistent calculations this is `0`; for charge-self-consistent calculations this is the value to monitor for charge convergence. |
 
 To judge convergence, compare lattice and impurity quantities in `INFO_ITER`. In a converged DMFT loop, `Nd_latt` and `Nd_imp` should approach each other, and the lattice and impurity `(Sigoo - Vdc)` values should stabilize.
+
+`INFO_ITER` is rewritten from scratch each time `DMFT.py` is launched, so it describes only the most recent run. The cumulative history is kept in `iterations.log`, which holds one row per launch, in chronological order,
+
+```text
+1 2
+1 2
+```
+
+Each row gives the last DFT+DMFT iteration and DMFT iteration that launch completed, using the same two counters as the first two columns of `INFO_ITER`. The example above is a calculation that was started once and resumed once, with two DMFT iterations completed in each, four in total. `--restart` deletes the file, so an existing `iterations.log` always describes the current sequence of resumes.
 
 Use `INFO_TIME` to identify expensive stages or stalled calculations. Use `INFO_KSUM` to inspect the lattice k-sum, including chemical potential, total electron count, occupancies, kinetic energy, and self-energy high-frequency terms. Use `INFO_ENERGY` when comparing total-energy estimates across iterations.
 
