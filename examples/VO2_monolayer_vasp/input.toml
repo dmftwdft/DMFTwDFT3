@@ -1,0 +1,52 @@
+# Input parameters for DFT+DMFT calculations
+# VO2 square-lattice monolayer. A two-dimensional (slab) test case.
+
+# Main loop parameters
+[p]
+Niter = 1 # Number of DFT+DMFT iterations
+Ndft = 1 # Number of DFT iterations
+Nit = 50 # Number of DMFT iterations
+n_tot = 13.0 # Number of total electrons: V d1 + 2 x O p6
+nf = 1.0 # Number of target Nd
+nspin = 1 # Number of total spins
+atomnames = ["V", "O"] # The name of atoms
+orbs = ["d", "p"] # The name of orbitals
+L_rot = [0, 0] # Whether rotate local axis or not
+cor_at = [["V1"]] # Correlated atoms, put symmetry atoms in the same list
+cor_orb = [[["d_z2"], ["d_x2y2"], ["d_xy"], ["d_xz", "d_yz"]]] # DMFT orbitals, other orbitals are treated by HF
+U = [5.0] # Intra-U for each cor_at
+J = [1.0] # Hund's coupling
+alpha = [0.2] # Double counting parameter
+mix_sig = 0.2 # Mixing parameter for Sigma
+q = [24, 24, 1] # Number of k-points for Wannier k-sum. A single k-point along the vacuum direction.
+ewin = [-7, 7] # Energy Window with respect to Fermi energy
+kmesh_tol_win = 1e-7 # Wannier90 k-mesh shell tolerance
+num_iter_win = 0 # Wannier90 spread minimization steps. 0 keeps the projected WFs, required for a slab.
+dis_num_iter_win = 500 # Wannier90 disentanglement steps
+noms = 400 # Number of Matsubara frequencies for k-sum
+sig_tol = 1e-3 # Self-energy convergence tolerance
+dc_type = 1 # Vdc type
+mu_iter = 100 # Steps for the chemical potential convergence
+Nd_qmc = 0 # 0: Use Nd_latt, 1: Use Nd_imp
+
+# CTQMC parameters
+[pC]
+exe = "ctqmc" # Name of impurity solver
+beta = 30.0 # Inverse temperature
+M = 5000000 # Number of Monte Carlo steps
+nom = 100 # number of Matsubara frequency points to sample
+svd_lmax = 30 # number of SVD functions to project the solution
+tsample = 200 # how often to record the measurements
+aom = 1 # number of frequency points to determin high frequency tail
+warmup = 250000 # Warmup
+GlobalFlip = 1000000 # Global flip
+Ncout = 500000 # Ncout
+Naver = 80000000 # Naver
+
+# CIX parameters
+[pD]
+"para=" = 1
+"l=" = 2
+"n=" = [0, 1, 2]
+"OCA_G=" = false
+"CoulombF=" = "Ising"

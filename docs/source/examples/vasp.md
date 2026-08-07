@@ -24,4 +24,5 @@ Examples are listed below.
 
 srvo3_vasp
 lanio3_vasp
+vo2_monolayer_vasp
 ```

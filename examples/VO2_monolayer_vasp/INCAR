@@ -1,0 +1,17 @@
+System     = VO2_monolayer
+ENCUT      = 600.0
+NBANDS     = 40
+EDIFF      = 1E-6
+GGA        = PS
+IALGO      = 48
+LMAXMIX    = 4
+ADDGRID    = .TRUE.
+ISPIN      = 1
+NCORE      = 1
+LWANNIER90 = .TRUE.
+
+# Gaussian smearing rather than the tetrahedron method (ISMEAR = -4) used in the
+# bulk examples. The tetrahedron method is unreliable when only a single k-point
+# exists along the third direction, which is what a 12x12x1 slab mesh gives.
+ISMEAR     = 0
+SIGMA      = 0.05
