@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.0 - 2026-08-07
+
+- Added `kmesh_tol_win`, `num_iter_win`, `dis_num_iter_win` keywords as input arguments in `input.toml` to control the Wannier90 k-mesh tolerance and number of iterations for disentanglement.
+
 ## 2.4 - 2026-07-31
 
 - Removed the `path_bin` setting from `input.toml`. The `bin` directory is now derived from the installed package location, so no path configuration is required. Existing `input.toml` files that still set `path_bin` continue to load; the value is ignored.
