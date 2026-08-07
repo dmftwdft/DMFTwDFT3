@@ -345,7 +345,7 @@
       deallocate(u_matrix_opt)
       deallocate(kpt_latt)
 
-      num_kpts=qx*qx*(qz/2+1)
+      num_kpts=qx*qy*(qz/2+1)
       allocate(kpt_latt(3,num_kpts))
       allocate(kweight(num_kpts))
       nkp=0

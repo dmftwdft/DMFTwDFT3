@@ -2,7 +2,8 @@
 
 ## 2.5.1 - 2026-08-07
 
-- Fixed generate_kpts.F90 to use `num_new_kpts=qx*qy*qz/2+1)` replacing the previous qx*qx*qz/2+1) value.
+- Fixed the uniform k-mesh allocation in `generate_kpts.F90` to use `num_new_kpts=qx*qy*(qz/2+1)` instead of `qx*qx*(qz/2+1)`. The previous expression under-allocated the k-point and weight arrays whenever `q_y > q_x`, so the k-point loop wrote past the end of both. This affected every non-charge-self-consistent DMFT k-sum and every density of states calculation, since `dmft.x` and `dmft_dos.x` both call `generate_uniform_kmesh`. Meshes with `q_x = q_y` were unaffected. The same correction was applied to the legacy `dmft_ksum.f`, `dmft_ksum_dos.f`, and `dmft_ksum_sp.f`, which are built but no longer installed or invoked.
+- Removed `sources/dmft_ksum/fort_kpt_tools.f`, a duplicate of `sources/fort_kpt_tools/fort_kpt_tools.f` that no build rule referenced. The copy under `sources/fort_kpt_tools` is the one compiled into `fort_kpt_tools.so` and imported by `XHF0.py`.
 
 ## 2.5.0 - 2026-08-07
 
