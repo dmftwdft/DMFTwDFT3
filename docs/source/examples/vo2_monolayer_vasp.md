@@ -204,14 +204,19 @@ For `postDMFT.py bands --plot-partial -w`, the Wannier order follows the
 projection block (`V:d` then `O:p`), one-based:
 
 <!-- prettier-ignore -->
-| Index | Orbital | Index | Orbital |
-| --- | --- | --- | --- |
-| 1 | V `d_z2` | 7 | O1 `p_x` |
-| 2 | V `d_xz` | 8 | O1 `p_y` |
-| 3 | V `d_yz` | 9 | O2 `p_z` |
-| 4 | V `d_x2y2` | 10 | O2 `p_x` |
-| 5 | V `d_xy` | 11 | O2 `p_y` |
-| 6 | O1 `p_z` | | |
+| Index | Orbital |
+| --- | --- |
+| 1 | V `d_z2` |
+| 2 | V `d_xz` |
+| 3 | V `d_yz` |
+| 4 | V `d_x2y2` |
+| 5 | V `d_xy` |
+| 6 | O1 `p_z` |
+| 7 | O1 `p_x` |
+| 8 | O1 `p_y` |
+| 9 | O2 `p_z` |
+| 10 | O2 `p_x` |
+| 11 | O2 `p_y` |
 
 The `--cor-orb-index` argument of `plotDMFT.py` and `Z.py` refers to the four
 `cor_orb` groups tabulated earlier instead, and is unrelated to this ordering.
