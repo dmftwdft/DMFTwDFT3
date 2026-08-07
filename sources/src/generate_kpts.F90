@@ -29,7 +29,7 @@ contains
 
 
 !    qx=24;qy=24;qz=24
-    num_new_kpts=qx*qx*(qz/2+1)
+    num_new_kpts=qx*qy*(qz/2+1)
     allocate(kpts(3,num_new_kpts))
     allocate(weight(num_new_kpts))
     kpts=0.0_dp

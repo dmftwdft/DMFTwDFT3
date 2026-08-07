@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.1 - 2026-08-07
+
+- Fixed generate_kpts.F90 to use `num_new_kpts=qx*qy*qz/2+1)` replacing the previous qx*qx*qz/2+1) value.
+
 ## 2.5.0 - 2026-08-07
 
 - Added `kmesh_tol_win`, `num_iter_win`, `dis_num_iter_win` keywords as input arguments in `input.toml` to control the Wannier90 k-mesh tolerance and number of iterations for disentanglement.
