@@ -99,23 +99,51 @@ These are the parameters that differ from a bulk deck, and the reason for each.
 ## Wannier functions in a slab cell
 
 With a single k-point along the vacuum direction, the only finite-difference
-b-vector available along that direction has $|b| = 2\pi/c$, which for $c = 20$ Å
-is small enough that the spread computed along $z$ carries no useful
-information. The symptom is unmistakable in `wannier90.wout`: every Wannier
-function reports a spread of order 100 Å$^2$ already in the `Initial State`
-block, before any minimization, and $\Omega_D$ is three orders of magnitude
-larger than $\Omega_I$.
+b-vector available along that direction is $b_z = 2\pi/c$. The spread and the
+Wannier centre along $z$ are then determined by a single overlap phase, and that
+phase is defined only modulo $2\pi$, so the $z$ component of the spread carries
+no useful information.
 
-The subspace itself is unaffected, and $\Omega_I$ and $\Omega_{OD}$ remain
-small and meaningful. What fails is the spread minimization, which then spends
-its iterations moving Wannier centres along a direction in which the objective
+Because the layer sits at $z = c/2$, the phase for a state centred in the layer
+is $e^{-i b_z c/2} = e^{-i\pi}$, which lies exactly on the branch cut of
+$\mathrm{Im}\ln$. Numerical noise flips it between $+\pi$ and $-\pi$ from one
+in-plane k-point to the next, so the apparent centre alternates between $+c/2$
+and $-c/2$. Since $\Omega_D$ along a direction is the k-space variance of the
+apparent centre, this contributes
+
+$$\Omega_D^{(z)} \; \simeq \; (c/2)^2 \quad \text{per Wannier function,}$$
+
+which for $c = 20$ Å is 100 Å$^2$. This example reports $\Omega_D = 1098.3$ Å$^2$
+for 11 Wannier functions, or 99.8 Å$^2$ each.
+
+Two features of `wannier90.wout` confirm that this is bookkeeping rather than
+delocalization. Subtracting 100 Å$^2$ from each reported spread leaves 0.21 to
+0.81 Å$^2$, the same range as the bulk SrVO$_3$ run. And the reported $z$
+centres are small but quantized in steps of $c/N_k$, because each is the mean of
+a $\pm c/2$ distribution and records only how many k-points chose $+\pi$ over
+$-\pi$. A genuine position would not be quantized on the k-mesh.
+
+Read $\Omega_I$ instead. It is the only gauge-invariant part of the spread and
+the only one that tests whether disentanglement selected a good subspace. This
+example gives $\Omega_I = 7.90$ Å$^2$ over 11 Wannier functions, or 0.718 Å$^2$
+each, against 0.716 Å$^2$ each for bulk SrVO$_3$. $\Omega_D$ does not enter
+$H(\mathbf{R})$; it is a diagnostic computed from the overlaps.
+
+What does go wrong if the minimization is allowed to run is that it spends its
+iterations moving Wannier centres along a direction in which the objective
 function is meaningless. Centres drift away from the atomic plane even though
-every atom lies in it.
+every atom lies in it, and the drift corrupts the orbital character of the
+projection. Setting `num_iter_win = 0` skips the minimization and keeps the
+projected Wannier functions, which is the appropriate choice for a slab and is a
+common choice for DFT+DMFT generally. Disentanglement is a separate step and is
+still performed; `dis_num_iter_win` stays at its default.
 
-Setting `num_iter_win = 0` skips the minimization and keeps the projected
-Wannier functions, which is the appropriate choice for a slab and is a common
-choice for DFT+DMFT generally. Disentanglement is a separate step and is still
-performed; `dis_num_iter_win` stays at its default.
+Note that `num_iter_win = 0` does not remove the 100 Å$^2$ offset, which is
+fixed by the cell geometry rather than by the minimizer. It prevents the drift,
+not the artifact. Placing the layer at $z = 0$ would move the phase off the
+branch cut and collapse $\Omega_D$, at the cost of a slab that straddles the
+cell boundary; the choice here favours a readable `POSCAR` over a readable
+`wannier90.wout`.
 
 ## Running
 
@@ -145,10 +173,14 @@ charge density.
 
 ## What to check
 
-1. **Wannier quality first.** Confirm in `wannier90.wout` that the 11 final
-   Wannier centres sit on the V and O sites. A vacuum-localized Wannier function
-   is the characteristic failure mode of a slab calculation and invalidates
-   everything downstream.
+1. **Wannier quality first.** Confirm in `wannier90.wout` that the in-plane
+   components of the 11 final Wannier centres sit on the V and O sites, at
+   $(0,0)$ and at $(a/2, 0)$ and $(0, a/2)$. Check $\Omega_I$ rather than the
+   total spread, for the reasons given above, and ignore the $z$ components of
+   the centres entirely. A vacuum-localized Wannier function is the
+   characteristic failure mode of a slab calculation and invalidates everything
+   downstream, but it shows up as an in-plane centre off an atomic site or as an
+   inflated $\Omega_I$, not in $\Omega_D$.
 2. **`ewin`.** This is the parameter most likely to need adjustment in 2D. With
    20 Å of vacuum the vacuum level sits a few eV above $E_F$, and free-electron
    slab states form a dense ladder above it. The window `[-7, 7]` is a starting
