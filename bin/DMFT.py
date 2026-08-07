@@ -652,7 +652,9 @@ class DMFTLauncher:
             # be updated later once the DFT calculation is complete.
             self.DFT.EFERMI + p["ewin"][0],
             self.DFT.EFERMI + p["ewin"][1],
-            p["kmeshtol"],
+            p["kmesh_tol_win"],
+            p["num_iter_win"],
+            p["dis_num_iter_win"],
         )
 
         # If exclude_bands are to be included in the .win file.

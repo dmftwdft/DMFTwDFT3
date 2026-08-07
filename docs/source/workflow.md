@@ -62,7 +62,13 @@ Most calculation parameters live under the `[p]` section in `input.toml`. Please
 | `mu_iter` | Steps for the chemical potential convergence |
 | `Nd_qmc` | Default: 0  [0: Use Nd_latt, 1: Use Nd_imp] |
 | `sig_tol` | Tolerance for self-energy convergence to end calculation. Default: 1E$^{-03}$ |
-| `kmesh_tol` | Tolerance for k-mesh convergence. Default: 1E$^{-07}$ |
+| `kmesh_tol_win` | Wannier90 `kmesh_tol`. Tolerance used when identifying the shells of neighbouring k-points. Increase it if Wannier90 fails to find a consistent shell. Default: 1E$^{-07}$ |
+| `num_iter_win` | Wannier90 `num_iter`. Number of spread-minimization steps used to produce maximally localized Wannier functions. Set to `0` to keep the projected Wannier functions without minimization. Default: 500 |
+| `dis_num_iter_win` | Wannier90 `dis_num_iter`. Number of disentanglement steps used to extract the Wannier subspace from the outer energy window. Default: 500 |
+| `num_bands_win` | Optional Wannier90 `num_bands` override. When unset, the number of DFT bands is used. |
+| `exclude_bands` | Optional list of DFT bands to exclude from the Wannier projection, passed through to Wannier90 unchanged. |
+
+Parameters ending in `_win` are written to `wannier90.win` and affect the Wannier90 step alone, not the DMFT loop. They are named after the corresponding Wannier90 keywords, with the suffix separating them from the similarly named DMFT parameters above, such as `Niter`, `Nit`, and `mu_iter`.
 
 The `[pC]` table contains impurity-solver settings and the `[pD]` table contains CIX/atomic solver parameters passed to the impurity setup. For these solver-specific parameters, refer to the CTQMC documentation on the [eDMFT website](http://hauleweb.rutgers.edu/tutorials/Overview.html).
 
