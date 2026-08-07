@@ -3,20 +3,27 @@
 Source directory: `examples/VO2_monolayer_vasp`
 
 This example is a non-charge-self-consistent DFT+DMFT setup for a two-dimensional
-system: a single VO$_2$ plane on a square lattice, held at the SrVO$_3$ in-plane
-lattice constant with 20 Å of vacuum. It uses a V-$d$ $+$ O-$p$ Wannier subspace.
+system: a single VO$_2$ plane on a square lattice with 20 Å of vacuum, using a
+V-$d$ $+$ O-$p$ Wannier subspace.
 
 Nothing in DMFTwDFT is specific to three dimensions. A monolayer is treated as a
 slab in a periodic cell, and the two-dimensional character enters only through
-the k-meshes, the smearing, and the band path. This example exists to record
-those settings in one place, since each of them differs from the bulk examples
-for a distinct reason.
+the k-meshes, the smearing, the Wannier construction, and the band path. This
+example exists to record those settings in one place, since each of them differs
+from the bulk examples for a distinct reason.
 
-The deck is deliberately close to {doc}`srvo3_vasp`. Vanadium is V$^{4+}$, $d^1$
-in both systems, the Wannier manifold is V $d$ plus O $p$ in both, and $U$, $J$,
-$\beta$, and the double-counting scheme are unchanged. Differences between the
-two calculations are therefore attributable to dimensionality rather than to
-chemistry or parameters.
+The deck is constructed as a two-dimensional counterpart to {doc}`srvo3_vasp`
+rather than as a model of any known VO$_2$ phase. Removing the apical oxygens
+and the Sr sublattice from bulk SrVO$_3$ leaves a VO$_2$ plane, and the in-plane
+lattice constant is held at the bulk SrVO$_3$ value of 3.84652 Å rather than
+relaxed, so that the V-O bond length is identical in the two calculations.
+Vanadium is V$^{4+}$, $d^1$ in both, the Wannier manifold is V $d$ plus O $p$ in
+both, and the interaction parameters `U` and `J`, the inverse temperature
+`beta` $= 1/k_BT$, and the double-counting scheme are all unchanged. Both decks
+use `U = 5.0` eV, `J = 1.0` eV, and `beta = 30.0` eV$^{-1}$, the last
+corresponding to $T \approx 387$ K.
+Differences between the two runs are therefore attributable to dimensionality
+rather than to chemistry, bond length, or parameters.
 
 Included files,
 
